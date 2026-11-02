@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <algorithm>
 #include <atomic>
 #include <mutex>
@@ -235,6 +236,7 @@ bool sdl_event_filter(void* userdata, SDL_Event* event) {
         break;
     case SDL_EventType::SDL_QUIT: {
         if (!ultramodern::is_game_started()) {
+            fprintf(stderr, "[session] quit requested: SDL_QUIT before the game started\n");
             ultramodern::quit();
             return true;
         }
@@ -248,6 +250,7 @@ bool sdl_event_filter(void* userdata, SDL_Event* event) {
         // the activity, so there is nothing to confirm -- quit immediately (the
         // same action the prompt's "Quit" button performs) and let game_main
         // unwind and join the save thread cleanly.
+        fprintf(stderr, "[session] quit requested: Android is destroying the activity (SDL_QUIT)\n");
         ultramodern::quit();
         return true;
 #else

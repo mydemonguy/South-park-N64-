@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <algorithm>
 #include <cmath>
 
@@ -272,6 +273,7 @@ void goemon64::open_quit_game_prompt() {
         "Quit",
         "Cancel",
         []() {
+            fprintf(stderr, "[session] quit requested: Quit in the quit prompt\n");
             ultramodern::quit();
         },
         []() {},

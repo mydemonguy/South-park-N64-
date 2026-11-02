@@ -26,7 +26,9 @@
 #include <cstdarg>
 #include <csignal>
 #include <cstdint>
+#include <cerrno>
 #include <cstring>
+#include <ctime>
 
 #include <android/log.h>
 #include <dlfcn.h>
@@ -49,6 +51,12 @@ namespace southpark::crashlog {
 // Game demand paging (src/game/southpark_os.cpp): a TLB miss on one of the game's VM
 // regions arrives here as SIGSEGV and is serviced before anything is reported.
 extern "C" bool southpark_tlb_handle_fault(uintptr_t host_addr);
+
+// librecomp's shutdown flag (recomp.cpp). Once it is set, recomp::start() joins its
+// helper threads and munmaps RDRAM, but the N64 game threads are not stopped first: one
+// that is still running faults on its next RAM access. That is not a crash worth a
+// report; see crash_handler().
+extern std::atomic_bool exited;
 
 namespace goemon64::diag {
 
@@ -136,6 +144,17 @@ namespace goemon64::diag {
                 return; // page mapped; the faulting instruction retries
             }
             const uintptr_t base = g_rdram_base.load(std::memory_order_relaxed);
+            if ((sig == SIGSEGV || sig == SIGBUS) && exited.load(std::memory_order_relaxed) &&
+                base != 0 && fault >= base && fault < base + recomp::allocation_size) {
+                // Shutdown race (see `exited` above): RDRAM is already freed. Saves were
+                // flushed before that, so park this thread and let the exit finish; if it
+                // hasn't within 3 s, end the process quietly.
+                static const char msg[] = "[session] game thread touched RAM after shutdown began (ignored)\n";
+                southpark::crashlog::write_raw(msg, sizeof(msg) - 1);
+                struct timespec ts{3, 0};
+                while (nanosleep(&ts, &ts) == -1 && errno == EINTR) {}
+                _exit(0);
+            }
             const int phase = g_phase.load(std::memory_order_relaxed);
 
             char tname[32] = {0};

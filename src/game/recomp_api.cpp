@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <cmath>
 
 #include "recomp.h"
@@ -29,6 +30,7 @@ extern "C" void recomp_puts(uint8_t* rdram, recomp_context* ctx) {
 }
 
 extern "C" void recomp_exit(uint8_t* rdram, recomp_context* ctx) {
+    fprintf(stderr, "[session] quit requested: recomp_exit (mod)\n");
     ultramodern::quit();
 }
 

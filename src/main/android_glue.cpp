@@ -16,6 +16,7 @@
 
 #if defined(__ANDROID__)
 
+#include <cstdio>
 #include <atomic>
 #include <cstdlib>
 #include <filesystem>
@@ -236,6 +237,7 @@ namespace goemon64 {
     void request_restart(RestartTarget target) {
         g_restart_target.store(static_cast<int>(target));
         LOGI("request_restart(%d) -> quitting for relaunch", static_cast<int>(target));
+        fprintf(stderr, "[session] quit requested: restart for relaunch (%d)\n", static_cast<int>(target));
         // Reuse the normal shutdown: it flushes saves, joins the saving thread
         // and tears the renderer down before game_main() returns, at which point
         // SDLActivity finishes the activity and onDestroy() does the relaunch.

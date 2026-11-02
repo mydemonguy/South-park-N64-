@@ -1,3 +1,4 @@
+#include <cstdio>
 #include "recomp_ui.h"
 #include "goemon_config.h"
 #include "goemon_support.h"
@@ -111,6 +112,7 @@ public:
         );
         recompui::register_event(listener, "exit_game",
             [](const std::string& param, Rml::Event& event) {
+                fprintf(stderr, "[session] quit requested: Exit in the launcher\n");
                 ultramodern::quit();
             }
         );
