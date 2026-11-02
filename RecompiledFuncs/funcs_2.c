@@ -10002,7 +10002,7 @@ RECOMP_FUNC void func_0021DB18(uint8_t* rdram, recomp_context* ctx) {
     // 0x0021DB24: jal         0x0029D308
     // 0x0021DB28: sw          $s0, 0x10($sp)
     MEM_W(0X10, ctx->r29) = ctx->r16;
-    func_0029D308(rdram, ctx);
+    osGetMemSize_recomp(rdram, ctx);
         goto after_0;
     // 0x0021DB28: sw          $s0, 0x10($sp)
     MEM_W(0X10, ctx->r29) = ctx->r16;

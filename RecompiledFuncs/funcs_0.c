@@ -113,8 +113,8 @@ L_80000434:
     // 0x800004A8: nop
 
     after_1:
-    // 0x800004AC: break       1, 2
-    do_break(2147484844);
+    // 0x800004AC: nop
+
 ;}
 RECOMP_FUNC void boot_map_tlb(uint8_t* rdram, recomp_context* ctx) {
     uint64_t hi = 0, lo = 0, result = 0;

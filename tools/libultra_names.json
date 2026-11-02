@@ -1,92 +1,361 @@
 {
   "_comment": "South Park (USA) libultra 2.0D identification. 'sig' = n64sym signature match (relocations masked) cross-checked against call targets; 'struct' = identified from call graph + code shape against ultralib sources. Names starting with sp_ are South Park runtime implementations (src/game/southpark_os.cpp) that replace the game's hardware-level code.",
   "names": {
-    "0029A700": ["osAiGetLength", "struct: reads AI_LEN_REG"],
-    "0029A718": ["osAiSetFrequency", "struct: AI regs + division"],
-    "0029A830": ["osAiSetNextBuffer", "struct: __osAiDeviceBusy + osVirtualToPhysical + AI regs"],
-    "0029A8C0": ["__osAiDeviceBusy", "sig"],
-    "0029A8D8": ["osContStartQuery", "struct: SI access + __osPackRequestData"],
-    "0029A960": ["osContGetQuery", "sig"],
-    "0029A980": ["osContStartReadData", "struct: SI access + __osPackReadData"],
-    "0029AA14": ["osContGetReadData", "struct: unpacks PIF buffer, called by game"],
-    "0029AAAC": ["__osPackReadData", "struct"],
-    "0029ACA0": ["osContInit", "struct: osGetTime/osSetTimer delay, __osSiCreateAccessQueue, __osContGetInitData"],
-    "0029AE40": ["__osPackRequestData", "struct"],
-    "0029AEF8": ["__osContGetInitData", "sig (reloc target of osContGetQuery)"],
-    "0029AFB0": ["osDpSetNextBuffer", "struct: __osDpDeviceBusy + DP regs"],
-    "0029B050": ["__osDpDeviceBusy", "sig"],
-    "0029C0E8": ["sp_osPiRawStartDma", "struct: osPiRawStartDma(dir, devAddr, dram, size); PI regs | osRomBase. Called directly by the game's own DMA thread"],
-    "0029C1C0": ["__osSiCreateAccessQueue", "struct"],
-    "0029C214": ["__osSiGetAccess", "struct"],
-    "0029C280": ["__osSiRelAccess", "struct"],
-    "0029C2A8": ["__osSiRawStartDma", "sig"],
-    "0029C360": ["__osSiDeviceBusy", "sig"],
-    "0029C460": ["osSpTaskLoad", "struct: _VirtualToPhysicalTask, __osSpSetPc, __osSpRawStartDma"],
-    "0029C564": ["osSpTaskStartGo", "sig"],
-    "0029C590": ["__osSpDeviceBusy", "sig"],
-    "0029C5A8": ["__osSpRawStartDma", "struct: SP DMA regs"],
-    "0029C6A8": ["__osSpSetPc", "struct: SP_PC_REG"],
-    "0029C6D8": ["__osSpSetStatus", "sig"],
-    "0029C6F0": ["osSpTaskYield", "sig"],
-    "0029C710": ["osSpTaskYielded", "sig"],
-    "0029C760": ["__osSpGetStatus", "sig (reloc target)"],
-    "0029C778": ["osViBlack", "sig"],
-    "0029C7D8": ["__osViInit", "struct: called by osCreateViManager"],
-    "0029C910": ["osCreateViManager", "struct: creates/starts VI thread, osSetEventMesg"],
-    "0029CA80": ["viMgrMain", "struct: VI thread loop"],
-    "0029CC00": ["__osViGetCurrentContext", "struct (sig collided with MusPtrBankGetCurrent)"],
-    "0029CC10": ["osViSetEvent", "sig"],
-    "0029CC68": ["osViSetMode", "struct: __osViNext->modep/state/control"],
-    "0029CCB8": ["osViSetSpecialFeatures", "struct"],
-    "0029CE20": ["osViSetYScale", "sig"],
-    "0029CE68": ["osViSwapBuffer", "sig"],
-    "0029CEB0": ["__osViSwapContext", "struct"],
-    "0029D1F8": ["osCreateMesgQueue", "sig"],
-    "0029D220": ["osCreateThread", "struct: sets ctx.ra=__osCleanupThread, sr=0x0400FF03"],
-    "0029D358": ["osGetThreadPri", "struct: NULL -> __osRunningThread, return ->priority"],
-    "0029D378": ["osGetTime", "struct"],
-    "0029D3F8": ["osInitialize", "struct"],
-    "0029D618": ["osPiRawReadIo", "struct: PI busy wait + KSEG1 read"],
-    "0029D6B0": ["__osSiRawReadIo", "sig collided with __osSpRawReadIo; calls __osSiDeviceBusy"],
-    "0029D740": ["__osSiRawWriteIo", "sig"],
-    "0029D7B0": ["osJamMesg", "struct"],
-    "0029D8E8": ["osRecvMesg", "struct"],
-    "0029DA10": ["osSendMesg", "struct: called by __osTimerInterrupt"],
-    "0029DB40": ["sp_osSetEventMesg", "struct: osSetEventMesg; wrapped so OS_EVENT_PI is honored"],
-    "0029DBA0": ["osSetThreadPri", "struct"],
-    "0029DC68": ["osSetTimer", "struct: __osInsertTimer + __osSetTimerIntr"],
-    "0029DCF8": ["osStartThread", "struct"],
-    "0029DE10": ["__osDequeueThread", "sig"],
-    "0029DE48": ["__osTimerInterrupt", "struct"],
-    "0029DF90": ["__osTimerServicesInit", "sig"],
-    "0029DFE4": ["__osSetTimerIntr", "sig"],
-    "0029E044": ["__osInsertTimer", "sig"],
-    "0029E150": ["osVirtualToPhysical", "sig (reloc target)"],
-    "0029E1B0": ["__osExceptionPreamble", "sig"],
-    "0029E8AC": ["__osEnqueueAndYield", "sig (reloc target)"],
-    "0029EA48": ["__osEnqueueThread", "struct"],
-    "0029EA98": ["__osPopThread", "struct"],
-    "0029EAB0": ["__osDispatchThread", "struct: eret"],
-    "0029FF98": ["osDestroyThread", "struct"],
-    "002A00F8": ["osYieldThread", "sig"],
-    "002A0140": ["osGetCount", "sig"],
-    "002A0160": ["__osGetSR", "sig"],
-    "002A0170": ["__osDisableInt", "sig"],
-    "002A0190": ["__osRestoreInt", "sig"],
-    "002A01B0": ["osInvalDCache", "sig (reloc target)"],
-    "002A0248": ["osInvalICache", "struct: cache ops, called by osInitialize"],
-    "002A02B0": ["__osProbeTLB", "struct: tlbp/tlbr, called by osVirtualToPhysical"],
-    "002A0378": ["__osSetCompare", "sig"],
-    "002A0388": ["__osSetFpcCsr", "sig"],
-    "002A0398": ["osSetIntMask", "sig (reloc target)"],
-    "002A0440": ["__osSetSR", "sig"],
-    "002A0450": ["sp_osUnmapTLBAll", "sig osUnmapTLBAll; South Park implementation"],
-    "002A0498": ["osWritebackDCache", "sig (reloc target)"],
-    "002A0500": ["osWritebackDCacheAll", "sig"],
-    "00291198": ["sp_osMapTLB", "struct: osMapTLB(index, pm, vaddr, even, odd, asid); South Park implementation"],
-    "00291218": ["sp_osUnmapTLB", "sig osUnmapTLB; South Park implementation"],
-    "002A3480": ["sp_cart_io_write", "struct: PI busy wait + KSEG1 store (streaming code)"],
-    "002A34B4": ["sp_cart_io_read", "struct: PI busy wait + KSEG1 load (streaming code)"],
-    "0022BCE8": ["game_boot", "struct: copies 1MB boot image, clears BSS, starts the game"]
+    "0022BCE8": [
+      "game_boot",
+      "struct: copies 1MB boot image, clears BSS, starts the game"
+    ],
+    "00291198": [
+      "sp_osMapTLB",
+      "struct: osMapTLB(index, pm, vaddr, even, odd, asid); South Park implementation"
+    ],
+    "00291218": [
+      "sp_osUnmapTLB",
+      "sig osUnmapTLB; South Park implementation"
+    ],
+    "0029A700": [
+      "osAiGetLength",
+      "struct: reads AI_LEN_REG"
+    ],
+    "0029A718": [
+      "osAiSetFrequency",
+      "struct: AI regs + division"
+    ],
+    "0029A830": [
+      "osAiSetNextBuffer",
+      "struct: __osAiDeviceBusy + osVirtualToPhysical + AI regs"
+    ],
+    "0029A8C0": [
+      "__osAiDeviceBusy",
+      "sig"
+    ],
+    "0029A8D8": [
+      "osContStartQuery",
+      "struct: SI access + __osPackRequestData"
+    ],
+    "0029A960": [
+      "osContGetQuery",
+      "sig"
+    ],
+    "0029A980": [
+      "osContStartReadData",
+      "struct: SI access + __osPackReadData"
+    ],
+    "0029AA14": [
+      "osContGetReadData",
+      "struct: unpacks PIF buffer, called by game"
+    ],
+    "0029AAAC": [
+      "__osPackReadData",
+      "struct"
+    ],
+    "0029ACA0": [
+      "osContInit",
+      "struct: osGetTime/osSetTimer delay, __osSiCreateAccessQueue, __osContGetInitData"
+    ],
+    "0029AE40": [
+      "__osPackRequestData",
+      "struct"
+    ],
+    "0029AEF8": [
+      "__osContGetInitData",
+      "sig (reloc target of osContGetQuery)"
+    ],
+    "0029AFB0": [
+      "osDpSetNextBuffer",
+      "struct: __osDpDeviceBusy + DP regs"
+    ],
+    "0029B050": [
+      "__osDpDeviceBusy",
+      "sig"
+    ],
+    "0029C0E8": [
+      "sp_osPiRawStartDma",
+      "struct: osPiRawStartDma(dir, devAddr, dram, size); PI regs | osRomBase. Called directly by the game's own DMA thread"
+    ],
+    "0029C1C0": [
+      "__osSiCreateAccessQueue",
+      "struct"
+    ],
+    "0029C214": [
+      "__osSiGetAccess",
+      "struct"
+    ],
+    "0029C280": [
+      "__osSiRelAccess",
+      "struct"
+    ],
+    "0029C2A8": [
+      "__osSiRawStartDma",
+      "sig"
+    ],
+    "0029C360": [
+      "__osSiDeviceBusy",
+      "sig"
+    ],
+    "0029C460": [
+      "osSpTaskLoad",
+      "struct: _VirtualToPhysicalTask, __osSpSetPc, __osSpRawStartDma"
+    ],
+    "0029C564": [
+      "osSpTaskStartGo",
+      "sig"
+    ],
+    "0029C590": [
+      "__osSpDeviceBusy",
+      "sig"
+    ],
+    "0029C5A8": [
+      "__osSpRawStartDma",
+      "struct: SP DMA regs"
+    ],
+    "0029C6A8": [
+      "__osSpSetPc",
+      "struct: SP_PC_REG"
+    ],
+    "0029C6D8": [
+      "__osSpSetStatus",
+      "sig"
+    ],
+    "0029C6F0": [
+      "osSpTaskYield",
+      "sig"
+    ],
+    "0029C710": [
+      "osSpTaskYielded",
+      "sig"
+    ],
+    "0029C760": [
+      "__osSpGetStatus",
+      "sig (reloc target)"
+    ],
+    "0029C778": [
+      "osViBlack",
+      "sig"
+    ],
+    "0029C7D8": [
+      "__osViInit",
+      "struct: called by osCreateViManager"
+    ],
+    "0029C8D8": [
+      "osViGetCurrentFramebuffer",
+      "struct: returns __osViCurr->framep (0x800B3478); called by the game's scheduler"
+    ],
+    "0029C910": [
+      "osCreateViManager",
+      "struct: creates/starts VI thread, osSetEventMesg"
+    ],
+    "0029CA80": [
+      "viMgrMain",
+      "struct: VI thread loop"
+    ],
+    "0029CC00": [
+      "__osViGetCurrentContext",
+      "struct (sig collided with MusPtrBankGetCurrent)"
+    ],
+    "0029CC10": [
+      "osViSetEvent",
+      "sig"
+    ],
+    "0029CC68": [
+      "osViSetMode",
+      "struct: __osViNext->modep/state/control"
+    ],
+    "0029CCB8": [
+      "osViSetSpecialFeatures",
+      "struct"
+    ],
+    "0029CE20": [
+      "osViSetYScale",
+      "sig"
+    ],
+    "0029CE68": [
+      "osViSwapBuffer",
+      "sig"
+    ],
+    "0029CEB0": [
+      "__osViSwapContext",
+      "struct"
+    ],
+    "0029D1F8": [
+      "osCreateMesgQueue",
+      "sig"
+    ],
+    "0029D220": [
+      "osCreateThread",
+      "struct: sets ctx.ra=__osCleanupThread, sr=0x0400FF03"
+    ],
+    "0029D308": [
+      "osGetMemSize",
+      "struct: probes KSEG1 RAM at 1 MB steps with 0x12345678/0x87654321; crashed on device at 0xA0400000"
+    ],
+    "0029D358": [
+      "osGetThreadPri",
+      "struct: NULL -> __osRunningThread, return ->priority"
+    ],
+    "0029D378": [
+      "osGetTime",
+      "struct"
+    ],
+    "0029D3F8": [
+      "osInitialize",
+      "struct"
+    ],
+    "0029D618": [
+      "osPiRawReadIo",
+      "struct: PI busy wait + KSEG1 read"
+    ],
+    "0029D6B0": [
+      "__osSiRawReadIo",
+      "sig collided with __osSpRawReadIo; calls __osSiDeviceBusy"
+    ],
+    "0029D740": [
+      "__osSiRawWriteIo",
+      "sig"
+    ],
+    "0029D7B0": [
+      "osJamMesg",
+      "struct"
+    ],
+    "0029D8E8": [
+      "osRecvMesg",
+      "struct"
+    ],
+    "0029DA10": [
+      "osSendMesg",
+      "struct: called by __osTimerInterrupt"
+    ],
+    "0029DB40": [
+      "sp_osSetEventMesg",
+      "struct: osSetEventMesg; wrapped so OS_EVENT_PI is honored"
+    ],
+    "0029DBA0": [
+      "osSetThreadPri",
+      "struct"
+    ],
+    "0029DC68": [
+      "osSetTimer",
+      "struct: __osInsertTimer + __osSetTimerIntr"
+    ],
+    "0029DCF8": [
+      "osStartThread",
+      "struct"
+    ],
+    "0029DE10": [
+      "__osDequeueThread",
+      "sig"
+    ],
+    "0029DE48": [
+      "__osTimerInterrupt",
+      "struct"
+    ],
+    "0029DF90": [
+      "__osTimerServicesInit",
+      "sig"
+    ],
+    "0029DFE4": [
+      "__osSetTimerIntr",
+      "sig"
+    ],
+    "0029E044": [
+      "__osInsertTimer",
+      "sig"
+    ],
+    "0029E150": [
+      "osVirtualToPhysical",
+      "sig (reloc target)"
+    ],
+    "0029E1B0": [
+      "__osExceptionPreamble",
+      "sig"
+    ],
+    "0029E8AC": [
+      "__osEnqueueAndYield",
+      "sig (reloc target)"
+    ],
+    "0029EA48": [
+      "__osEnqueueThread",
+      "struct"
+    ],
+    "0029EA98": [
+      "__osPopThread",
+      "struct"
+    ],
+    "0029EAB0": [
+      "__osDispatchThread",
+      "struct: eret"
+    ],
+    "0029FF98": [
+      "osDestroyThread",
+      "struct"
+    ],
+    "002A00F8": [
+      "osYieldThread",
+      "sig"
+    ],
+    "002A0140": [
+      "osGetCount",
+      "sig"
+    ],
+    "002A0160": [
+      "__osGetSR",
+      "sig"
+    ],
+    "002A0170": [
+      "__osDisableInt",
+      "sig"
+    ],
+    "002A0190": [
+      "__osRestoreInt",
+      "sig"
+    ],
+    "002A01B0": [
+      "osInvalDCache",
+      "sig (reloc target)"
+    ],
+    "002A0248": [
+      "osInvalICache",
+      "struct: cache ops, called by osInitialize"
+    ],
+    "002A02B0": [
+      "__osProbeTLB",
+      "struct: tlbp/tlbr, called by osVirtualToPhysical"
+    ],
+    "002A0378": [
+      "__osSetCompare",
+      "sig"
+    ],
+    "002A0388": [
+      "__osSetFpcCsr",
+      "sig"
+    ],
+    "002A0398": [
+      "osSetIntMask",
+      "sig (reloc target)"
+    ],
+    "002A0440": [
+      "__osSetSR",
+      "sig"
+    ],
+    "002A0450": [
+      "sp_osUnmapTLBAll",
+      "sig osUnmapTLBAll; South Park implementation"
+    ],
+    "002A0498": [
+      "osWritebackDCache",
+      "sig (reloc target)"
+    ],
+    "002A0500": [
+      "osWritebackDCacheAll",
+      "sig"
+    ],
+    "002A3480": [
+      "sp_cart_io_write",
+      "struct: PI busy wait + KSEG1 store (streaming code)"
+    ],
+    "002A34B4": [
+      "sp_cart_io_read",
+      "struct: PI busy wait + KSEG1 load (streaming code)"
+    ]
   }
 }

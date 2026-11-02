@@ -42019,7 +42019,7 @@ L_0025897C:
     // 0x00258998: jal         0x0029C8D8
     // 0x0025899C: nop
 
-    func_0029C8D8(rdram, ctx);
+    osViGetCurrentFramebuffer_recomp(rdram, ctx);
         goto after_0;
     // 0x0025899C: nop
 
@@ -43005,7 +43005,7 @@ RECOMP_FUNC void func_00258E8C(uint8_t* rdram, recomp_context* ctx) {
     // 0x00258EB4: jal         0x0029C8D8
     // 0x00258EB8: nop
 
-    func_0029C8D8(rdram, ctx);
+    osViGetCurrentFramebuffer_recomp(rdram, ctx);
         goto after_0;
     // 0x00258EB8: nop
 

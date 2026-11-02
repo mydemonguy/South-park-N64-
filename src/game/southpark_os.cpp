@@ -140,6 +140,15 @@ extern "C" bool southpark_init_tlb_memory(uint8_t* rdram) {
     }
     rdram_fd = fd;
     tlb_rdram = rdram;
+
+    // Uncached KSEG1 view of RAM (0xA0000000 + phys): same pages, mapped again. Game
+    // and libultra code sometimes address RAM this way; without the mirror those
+    // accesses land in the runtime's inaccessible guard region and fault.
+    uint64_t kseg1_off = host_offset(0xA0000000u);
+    void* k1 = mmap(rdram + kseg1_off, phys_ram_size, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED, fd, 0);
+    if (k1 == MAP_FAILED) {
+        std::fprintf(stderr, "[southpark] KSEG1 RAM mirror failed\n");
+    }
     return true;
 #endif
 }

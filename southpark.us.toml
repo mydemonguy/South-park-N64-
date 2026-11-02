@@ -47,7 +47,9 @@ stubs = [
     "func_00410E74",
 ]
 
-# Blank out the boot stub's TLB writes; it still jumps to game_boot afterwards.
+# Blank out the boot stub's TLB writes (it still jumps to game_boot afterwards) and the
+# `break` after that call, which is reached here because the call returns once the game's
+# threads are running.
 [[patches.instruction]]
 func = "recomp_entrypoint"
 vram = 0x80000434
@@ -81,6 +83,11 @@ value = 0x00000000
 [[patches.instruction]]
 func = "recomp_entrypoint"
 vram = 0x80000464
+value = 0x00000000
+
+[[patches.instruction]]
+func = "recomp_entrypoint"
+vram = 0x800004AC
 value = 0x00000000
 
 # game_boot copies the 1 MB boot image itself by polling PI_STATUS and reading the

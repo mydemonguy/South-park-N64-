@@ -58,8 +58,10 @@ out += "# South Park runtime implementations (src/game/southpark_os.cpp): not em
 out += "ignored = [\n" + "".join(f'    "{n}",\n' for n in sorted(set(custom))) + "]\n\n"
 out += "# Unnamed code that uses CP0/TLB/cache instructions and can't be recompiled.\n"
 out += "stubs = [\n" + "".join(f'    "{n}",\n' for n in sorted(set(stubs))) + "]\n\n"
-out += "# Blank out the boot stub's TLB writes; it still jumps to game_boot afterwards.\n"
-for vram in (0x80000434, 0x80000438, 0x80000440, 0x80000444, 0x80000448, 0x80000450, 0x80000464):
+out += "# Blank out the boot stub's TLB writes (it still jumps to game_boot afterwards) and the\n"
+out += "# `break` after that call, which is reached here because the call returns once the game's\n"
+out += "# threads are running.\n"
+for vram in (0x80000434, 0x80000438, 0x80000440, 0x80000444, 0x80000448, 0x80000450, 0x80000464, 0x800004AC):
     out += f'[[patches.instruction]]\nfunc = "recomp_entrypoint"\nvram = 0x{vram:08X}\nvalue = 0x00000000\n\n'
 out += """# game_boot copies the 1 MB boot image itself by polling PI_STATUS and reading the
 # cartridge through KSEG1 (0xB0001000), neither of which is mapped. The runtime has
