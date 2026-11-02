@@ -338,6 +338,7 @@ extern "C" void __osGetSR_recomp(uint8_t* rdram, recomp_context* ctx) { (void)rd
 extern "C" void __osSetSR_recomp(uint8_t* rdram, recomp_context* ctx) { (void)rdram; cop0_status_write(ctx, ctx->r4); }
 
 // ---- Internals that are only reachable from unused duplicate code ----
+// (__osViSwapContext is already stubbed in unknown_symbols.cpp.)
 #define SP_UNREACHABLE(name) \
     extern "C" void name##_recomp(uint8_t* rdram, recomp_context* ctx) { (void)rdram; (void)ctx; unreachable_internal(#name); }
 
@@ -346,7 +347,6 @@ SP_UNREACHABLE(__osDispatchThread)
 SP_UNREACHABLE(__osEnqueueAndYield)
 SP_UNREACHABLE(__osEnqueueThread)
 SP_UNREACHABLE(__osPopThread)
-SP_UNREACHABLE(__osViSwapContext)
 SP_UNREACHABLE(__osInsertTimer)
 SP_UNREACHABLE(__osSetTimerIntr)
 SP_UNREACHABLE(__osSetCompare)
