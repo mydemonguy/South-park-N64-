@@ -16,6 +16,11 @@ Fixes applied on top of spimdisasm's function list:
     data sections) become function starts when they look like one (a stack-frame
     setup, or right after an unconditional jump/return). Thread entries and callbacks
     are only reached through LOOKUP_FUNC, so every one of them must be a function.
+    Addresses built with lui/addiu (not ori, which builds constants) are also accepted
+    when they sit in the delay slot of a jump (hand-written code that shares one
+    instruction between a `jr $ra` and the next routine, e.g. 0x0027D7F0) or when a
+    stack frame is set up within their first few instructions (e.g. 0x00288970, which
+    follows a stray word). A shared delay slot stays in the function before it too.
 """
 import csv
 import re
@@ -72,10 +77,12 @@ def in_code(v):
 
 
 def pointer_targets(rom, sections):
-    """Code addresses referenced as data. Returns (built in code, stored in data):
-    data words include jump-table entries (case labels), so they need stricter checks."""
+    """Code addresses referenced as data. Returns (built in code, stored in data, built
+    with addiu): data words include jump-table entries (case labels), so they need
+    stricter checks; addiu-built ones are real addresses (%lo), not ori constants."""
     found = set()
     data_found = set()
+    addiu_found = set()
     for s in sections:
         regs = {}
         for vram in range(s.sec["vram"], s.sec["vram"] + s.sec["size"], 4):
@@ -90,6 +97,8 @@ def pointer_targets(rom, sections):
                 t = (regs[ins.rs.name] + imm) & 0xFFFFFFFF
                 if in_code(t) and t % 4 == 0:
                     found.add(t)
+                    if n == "cpu_addiu":
+                        addiu_found.add(t)
             if ins.isJump() or ins.isBranch():
                 regs = {}
     for a, b in DATA_ROM_RANGES:
@@ -97,10 +106,32 @@ def pointer_targets(rom, sections):
             w = struct.unpack_from(">I", rom, o)[0]
             if in_code(w) and w % 4 == 0:
                 data_found.add(w)
-    return found, data_found
+    return found, data_found, addiu_found
 
 
-def looks_like_start(s, v, strict=False):
+def is_shared_delay_slot(s, v):
+    """v is the delay slot of an unconditional jump/return (and so may be entered)."""
+    if v - 4 < s.sec["vram"]:
+        return False
+    prev = s.insn(v - 4)
+    return (prev.isJump() and not prev.doesLink()) or prev.isUnconditionalBranch()
+
+
+def sets_up_frame_soon(s, v, window=3):
+    """addiu sp, sp, -N within the first `window` instructions, before any control flow."""
+    for i in range(window):
+        a = v + 4 * i
+        if not s.contains(a):
+            return False
+        if (s.word(a) & 0xFFFF8000) == 0x27BD8000:
+            return True
+        ins = s.insn(a)
+        if ins.isJump() or ins.isBranch():
+            return False
+    return False
+
+
+def looks_like_start(s, v, strict=False, addiu_built=False):
     w = s.word(v)
     if (w & 0xFFFF8000) == 0x27BD8000:          # addiu sp, sp, -N
         return True
@@ -110,23 +141,26 @@ def looks_like_start(s, v, strict=False):
         prev = s.insn(v - 8)
         if (prev.isJump() and not prev.doesLink()) or prev.isUnconditionalBranch():
             return True
+    if addiu_built and (is_shared_delay_slot(s, v) or sets_up_frame_soon(s, v)):
+        return True
     return False
 
 
 def add_pointer_starts(s, funcs, targets):
     """Split functions at pointer targets that look like function starts."""
-    code_ptrs, data_ptrs = targets
+    code_ptrs, data_ptrs, addiu_ptrs = targets
     added = 0
     for t in sorted(code_ptrs | data_ptrs):
         if not s.contains(t) or t in funcs:
             continue
-        if not looks_like_start(s, t, strict=t not in code_ptrs):
+        if not looks_like_start(s, t, strict=t not in code_ptrs, addiu_built=t in addiu_ptrs):
             continue
         host = max((a for a in funcs if a < t), default=None)
         if host is None or host + funcs[host] <= t:
             continue
         end = host + funcs[host]
-        funcs[host] = t - host
+        # A shared delay slot also belongs to the jump before it.
+        funcs[host] = t - host + (4 if is_shared_delay_slot(s, t) else 0)
         funcs[t] = end - t
         added += 1
     return added

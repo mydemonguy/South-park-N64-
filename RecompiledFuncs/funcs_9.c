@@ -31048,6 +31048,14 @@ RECOMP_FUNC void func_0027D748(uint8_t* rdram, recomp_context* ctx) {
     // 0x0027D7F0: addu        $t6, $a0, $zero
     ctx->r14 = ADD32(ctx->r4, 0);
 ;}
+// Entry point in the delay slot of func_0027D748's `jr $ra` (hand-written code; the
+// game calls it through a pointer). Same as N64Recomp's output for 0x0027D7F0-0x0027DE30:
+// the shared instruction, then func_0027D7F4's body.
+RECOMP_FUNC void func_0027D7F0(uint8_t* rdram, recomp_context* ctx) {
+    // 0x0027D7F0: addu        $t6, $a0, $zero
+    ctx->r14 = ADD32(ctx->r4, 0);
+    func_0027D7F4(rdram, ctx);
+}
 RECOMP_FUNC void func_0027D7F4(uint8_t* rdram, recomp_context* ctx) {
     uint64_t hi = 0, lo = 0, result = 0;
     int c1cs = 0;
