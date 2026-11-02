@@ -1,0 +1,101 @@
+# Android APK build for South Park 64: Recompiled.
+#
+# The recompiled game code (RecompiledFuncs/), the audio microcode (rsp/aspMain.cpp)
+# and the patch set (RecompiledPatches/) are committed, so this build needs no ROM.
+# The APK contains no game data: the player imports their own South Park (USA) ROM
+# on first launch. Keep this repository private.
+#
+# Based on Goemon64Recomp-Android's android.yml (GPL-3.0).
+
+name: android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: build arm64 APK (debug)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          submodules: recursive
+
+      - name: Check committed recompiler output
+        run: |
+          test -f RecompiledFuncs/recomp_overlays.inl
+          test -f RecompiledFuncs/lookup.cpp
+          test -f rsp/aspMain.cpp
+          test -f RecompiledPatches/patches.c
+          test -f RecompiledPatches/patches_bin.c
+          echo "Recompiled C files: $(ls RecompiledFuncs/*.c | wc -l)"
+          # Never ship a ROM.
+          if git ls-files | grep -iE '\.(z64|n64|v64)$'; then
+            echo "::error::A ROM file is committed. Remove it."; exit 1
+          fi
+
+      - name: Guard dual source blending gating
+        run: ./.github/scripts/check-dual-src-blend.sh
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+
+      - name: ccache
+        uses: hendrikmuhs/ccache-action@d62db5f07c26379fc4b4e0916f098a92573c3b03 # v1.2.23
+        with:
+          key: android-arm64
+
+      - name: Install host toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build cmake clang lld llvm make
+
+      - name: Build host file_to_c
+        run: |
+          mkdir -p build-host-tools
+          clang++ -std=c++17 -O2 \
+            lib/rt64/src/tools/file_to_c/file_to_c.cpp \
+            -o build-host-tools/file_to_c
+          test -x build-host-tools/file_to_c
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4
+        with:
+          packages: platform-tools
+
+      - name: Install pinned NDK + CMake
+        run: |
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager "ndk;27.1.12297006" "cmake;3.22.1"
+
+      - name: Build debug APK (arm64-v8a)
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace -PcustomDriver=true
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: SouthPark64-android-debug-${{ github.sha }}
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14

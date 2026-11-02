@@ -1,0 +1,44 @@
+--- a/src/analysis.cpp
++++ b/src/analysis.cpp
+@@ -264,6 +264,21 @@
+     return true;
+ }
+ 
++
++// Some games (e.g. South Park) run code through a TLB mapping (0x00200000 + phys, or a
++// dynamically mapped block) but read jump tables through KSEG0 (0x80000000 + phys).
++// Those tables live in the boot image that IPL3/the game copies from ROM 0x1000 to
++// RAM 0x80000400, so a KSEG0 table address maps straight to a ROM offset.
++static uint32_t jtbl_rom_addr(const N64Recomp::Function& func, uint32_t vram) {
++    constexpr uint32_t boot_ram = 0x80000400u;
++    constexpr uint32_t boot_rom = 0x1000u;
++    constexpr uint32_t boot_size = 0x100000u;
++    if (func.vram < 0x80000000u && vram >= boot_ram && vram < boot_ram + boot_size) {
++        return vram - boot_ram + boot_rom;
++    }
++    return vram + func.rom - func.vram;
++}
++
+ bool N64Recomp::analyze_function(const N64Recomp::Context& context, const N64Recomp::Function& func,
+     const std::vector<rabbitizer::InstructionCpu>& instructions, N64Recomp::FunctionStats& stats) {
+     const Section* section = &context.sections[func.section_index];
+@@ -315,13 +330,17 @@
+         }
+ 
+         // TODO this assumes that the jump table is in the same section as the function itself
+-        cur_jtbl.rom = cur_jtbl.vram + func.rom - func.vram;
++        cur_jtbl.rom = jtbl_rom_addr(func, cur_jtbl.vram);
+         cur_jtbl.section_index = func.section_index;
+ 
+         while (vram < end_address) {
+             // Retrieve the current entry of the jump table
+             // TODO same as above
+-            uint32_t rom_addr = vram + func.rom - func.vram;
++            uint32_t rom_addr = jtbl_rom_addr(func, vram);
++            if ((size_t)rom_addr + sizeof(uint32_t) > context.rom.size()) {
++                fmt::print("Jump table at 0x{:08X} for instruction at 0x{:08X} is outside the ROM\n", cur_jtbl.vram, cur_jtbl.jr_vram);
++                return false;
++            }
+             uint32_t jtbl_word = byteswap(*reinterpret_cast<const uint32_t*>(&context.rom[rom_addr]));
+ 
+             if (cur_jtbl.got_offset.has_value() && got_ram_addr.has_value()) {

@@ -1,0 +1,51 @@
+#ifndef __INPUT_H__
+#define __INPUT_H__
+
+#include "patch_helpers.h"
+
+typedef enum {
+    RECOMP_CAMERA_NORMAL,
+    RECOMP_CAMERA_DUALANALOG,
+} RecompCameraMode;
+
+typedef enum {
+    RECOMP_AIMING_OVERRIDE_OFF = 0,
+    RECOMP_AIMING_OVERRIDE_DISABLE_LEFT_STICK = 1,
+    RECOMP_AIMING_OVERRIDE_FORCE_RIGHT_STICK = 2
+} RecompAimingOverideMode;
+
+extern RecompCameraMode recomp_camera_mode;
+extern RecompAimingOverideMode recomp_aiming_override_mode;
+
+DECLARE_FUNC(void, recomp_get_gyro_deltas, float* x, float* y);
+DECLARE_FUNC(void, recomp_get_mouse_deltas, float* x, float* y);
+DECLARE_FUNC(s32, recomp_get_targeting_mode);
+DECLARE_FUNC(void, recomp_get_inverted_axes, s32* x, s32* y);
+DECLARE_FUNC(s32, recomp_get_analog_cam_enabled);
+DECLARE_FUNC(void, recomp_get_analog_inverted_axes, s32* x, s32* y);
+DECLARE_FUNC(void, recomp_get_camera_inputs, float* x, float* y);
+DECLARE_FUNC(void, recomp_set_right_analog_suppressed, s32 suppressed);
+// Whether the main 3D field engine (the analog camera's own overlay) is the
+// module currently resident in slot A. Scopes the host's N64 R mask, so the
+// alternate modes that share the slot keep their native R -- the Hook Chain in
+// an Impact battle, for one.
+DECLARE_FUNC(void, recomp_set_field_engine_active, s32 active);
+DECLARE_FUNC(void, recomp_set_analog_cam_yaw, s32 yaw);
+DECLARE_FUNC(u32, recomp_time_us);
+// Analog-camera sensitivity per axis, 0-100 (50 = tuned default rate).
+DECLARE_FUNC(void, recomp_get_analog_cam_sensitivity, s32* x, s32* y);
+// R3 (right-stick click) held state — edge-detected by the patch to recenter.
+DECLARE_FUNC(s32, recomp_get_camera_recenter_pressed);
+// Physical right-trigger held state, read directly (not via N64 R, which is
+// suppressed in analog-camera mode) -- the analog camera's zoom modifier.
+DECLARE_FUNC(s32, recomp_get_camera_zoom_held);
+// Cheats menu toggles.
+DECLARE_FUNC(s32, recomp_get_infinite_health_enabled);
+DECLARE_FUNC(s32, recomp_get_infinite_money_enabled);
+DECLARE_FUNC(s32, recomp_get_infinite_lives_enabled);
+// Allow starting a character swap while walking/running.
+DECLARE_FUNC(s32, recomp_get_swap_while_moving_enabled);
+// Allow the player to keep moving during an attack.
+DECLARE_FUNC(s32, recomp_get_attack_while_moving_enabled);
+
+#endif

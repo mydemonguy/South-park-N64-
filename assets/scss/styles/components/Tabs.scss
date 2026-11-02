@@ -1,0 +1,74 @@
+/*
+    Example:
+        <tab class="tab">
+            <div>Graphics</div>
+            <div class="tab__indicator"></div>
+        </tab>
+*/
+
+.tabs tabs {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    // Mirrors assets/recomp.rcss, which is edited directly (this scss no longer
+    // regenerates it). Stops short of .config__icon-buttons and scrolls sideways;
+    // dragging is handled in ui_config.cpp (TabStripDragScroller).
+    margin-right: space(216);
+    overflow-x: auto;
+    overflow-y: hidden;
+
+    scrollbarhorizontal, scrollbarhorizontal slidertrack, scrollbarhorizontal sliderbar {
+        height: space(4);
+    }
+}
+
+.tab {
+    @extend %nav-all;
+    @extend %header-3;
+    display: block;
+    position: relative;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    margin: 0;
+    padding: space(20) space(24);
+    opacity: 0.9;
+    background-color: rgba(0,0,0,0);
+    color: $color-text-inactive;
+
+    &:selected {
+        color: $color-text;
+
+        .tab__indicator {
+            background-color: $color-border-solid;
+        }
+
+        &:hover {
+            cursor: default;
+        }
+    }
+
+    .rmlui-window:not([mouse-active]) &:focus {
+        transition: none;
+        animation: $focus-anim-border;
+
+        &:selected .tab__indicator {
+            animation: $focus-anim-bg;
+        }
+    }
+
+    &:focus, &:hover {
+        opacity: 1;
+        color: $color-text;
+        cursor: pointer;
+    }
+}
+
+.tab__indicator {
+    position: absolute;
+    right: 0;
+    bottom: 2dp;
+    left: 0;
+    height: 2dp;
+    background-color: rgba(0, 0, 0, 0);
+}

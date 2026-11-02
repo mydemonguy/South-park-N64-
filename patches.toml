@@ -1,0 +1,15 @@
+# N64Recomp config for the South Park (USA) patch set (patches/*.c).
+# Produces RecompiledPatches/patches.c, patches.bin and the patch section table.
+
+[input]
+elf_path = "patches/build/patches.elf"
+output_func_path = "RecompiledPatches"
+single_file_output = true
+use_absolute_symbols = true
+func_reference_syms_file = "southpark.us.syms.toml"
+data_reference_syms_files = []
+output_binary_path = "patches/patches.bin"
+unpaired_lo16_warnings = false
+allow_exports = true
+strict_patch_mode = true
+recomp_include = "#include \"sp_recomp.h\""

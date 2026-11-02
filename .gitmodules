@@ -1,0 +1,20 @@
+[submodule "lib/RmlUi"]
+	path = lib/RmlUi
+	url = https://github.com/mikke89/RmlUi/
+[submodule "lib/rt64"]
+	path = lib/rt64
+	url = https://github.com/ogdanimal/rt64
+	branch = goemon-android
+[submodule "lib/freetype-windows-binaries"]
+	path = lib/freetype-windows-binaries
+	url = https://github.com/ubawurinna/freetype-windows-binaries
+[submodule "lib/lunasvg"]
+	path = lib/lunasvg
+	url = https://github.com/sammycage/lunasvg
+[submodule "lib/N64ModernRuntime"]
+	path = lib/N64ModernRuntime
+	url = https://github.com/ogdanimal/N64ModernRuntime
+	branch = goemon-android
+[submodule "lib/libadrenotools"]
+	path = lib/libadrenotools
+	url = https://github.com/bylaws/libadrenotools.git
