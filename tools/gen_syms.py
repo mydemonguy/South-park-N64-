@@ -12,6 +12,10 @@ Fixes applied on top of spimdisasm's function list:
     extended to cover the code they run into. N64Recomp allows overlapping functions, so
     every entry point keeps working.
   * 4-byte "functions" that are really constants embedded in the code are dropped.
+  * Code addresses the game builds as pointers (lui/addiu pairs in code, words in the
+    data sections) become function starts when they look like one (a stack-frame
+    setup, or right after an unconditional jump/return). Thread entries and callbacks
+    are only reached through LOOKUP_FUNC, so every one of them must be a function.
 """
 import csv
 import re
@@ -57,6 +61,75 @@ def load_csv(path):
         text = r["functions called by this function"] + r["referenced functions"]
         refs.update(int(n, 16) for n in re.findall(r"func_([0-9A-F]{8})", text))
     return funcs, refs
+
+
+CODE_RANGES = [(0x00200528, 0x002A72D8), (0x00400000, 0x00414AA0)]
+DATA_ROM_RANGES = [(0xA7ED8, 0xC2C00), (0xD8AA0, 0xDAF10)]   # main data, block 2 data
+
+
+def in_code(v):
+    return any(a <= v < b for a, b in CODE_RANGES)
+
+
+def pointer_targets(rom, sections):
+    """Code addresses referenced as data. Returns (built in code, stored in data):
+    data words include jump-table entries (case labels), so they need stricter checks."""
+    found = set()
+    data_found = set()
+    for s in sections:
+        regs = {}
+        for vram in range(s.sec["vram"], s.sec["vram"] + s.sec["size"], 4):
+            ins = s.insn(vram)
+            n = ins.uniqueId.name
+            if n == "cpu_lui":
+                regs[ins.rt.name] = (s.word(vram) & 0xFFFF) << 16
+            elif n in ("cpu_addiu", "cpu_ori") and ins.rs.name in regs:
+                imm = s.word(vram) & 0xFFFF
+                if n == "cpu_addiu" and imm & 0x8000:
+                    imm -= 0x10000
+                t = (regs[ins.rs.name] + imm) & 0xFFFFFFFF
+                if in_code(t) and t % 4 == 0:
+                    found.add(t)
+            if ins.isJump() or ins.isBranch():
+                regs = {}
+    for a, b in DATA_ROM_RANGES:
+        for o in range(a, b, 4):
+            w = struct.unpack_from(">I", rom, o)[0]
+            if in_code(w) and w % 4 == 0:
+                data_found.add(w)
+    return found, data_found
+
+
+def looks_like_start(s, v, strict=False):
+    w = s.word(v)
+    if (w & 0xFFFF8000) == 0x27BD8000:          # addiu sp, sp, -N
+        return True
+    if strict:
+        return False
+    if v - 8 >= s.sec["vram"]:
+        prev = s.insn(v - 8)
+        if (prev.isJump() and not prev.doesLink()) or prev.isUnconditionalBranch():
+            return True
+    return False
+
+
+def add_pointer_starts(s, funcs, targets):
+    """Split functions at pointer targets that look like function starts."""
+    code_ptrs, data_ptrs = targets
+    added = 0
+    for t in sorted(code_ptrs | data_ptrs):
+        if not s.contains(t) or t in funcs:
+            continue
+        if not looks_like_start(s, t, strict=t not in code_ptrs):
+            continue
+        host = max((a for a in funcs if a < t), default=None)
+        if host is None or host + funcs[host] <= t:
+            continue
+        end = host + funcs[host]
+        funcs[host] = t - host
+        funcs[t] = end - t
+        added += 1
+    return added
 
 
 def split_mid_starts(funcs, targets):
@@ -163,6 +236,12 @@ def main():
     main_funcs, main_refs = load_csv(sys.argv[2])
     b2_funcs, b2_refs = load_csv(sys.argv[3])
     targets = main_refs | b2_refs
+
+    sections = [Section(rom, MAIN), Section(rom, BLOCK2)]
+    ptrs = pointer_targets(rom, sections)
+    for funcs, sec in ((main_funcs, MAIN), (b2_funcs, BLOCK2)):
+        n_ptr = add_pointer_starts(Section(rom, sec), funcs, ptrs)
+        print(f'{sec["name"]}: {n_ptr} functions split at pointer targets')
 
     out = ["# N64Recomp symbol file: South Park (USA), sha1 42d7350d1f9040c5546f481c4d650b99a23aadbc", ""]
     emit_section(out, BOOT, BOOT_FUNCS)
