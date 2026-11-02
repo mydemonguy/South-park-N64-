@@ -38,4 +38,10 @@ static inline int64_t sp_to_l(double v) {
 #define CVT_L_S(val) sp_to_l(rint((double)(val)))
 #define CVT_L_D(val) sp_to_l(rint((double)(val)))
 
+// VM region create/free hook (southpark.us.toml [[patches.hook]], src/game/southpark_os.cpp).
+#ifdef __cplusplus
+extern "C"
+#endif
+void southpark_vm_region_changed(uint8_t* rdram, uint32_t node, int freed);
+
 #endif

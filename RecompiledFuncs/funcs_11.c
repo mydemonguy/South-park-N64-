@@ -6524,6 +6524,7 @@ L_00290F08:
     ctx->r2 = MEM_W(ctx->r16, 0X0);
     // 0x00290F0C: sw          $v0, 0x0($v1)
     MEM_W(0X0, ctx->r3) = ctx->r2;
+    southpark_vm_region_changed(rdram, (uint32_t)ctx->r16, 1);
     // 0x00290F10: lhu         $v0, 0x6($s0)
     ctx->r2 = MEM_HU(ctx->r16, 0X6);
     // 0x00290F14: lw          $s1, 0x10($s0)
@@ -6745,6 +6746,7 @@ L_00291038:
 L_0029104C:
     // 0x0029104C: sll         $a1, $a1, 12
     ctx->r5 = S32(ctx->r5 << 12);
+    southpark_vm_region_changed(rdram, (uint32_t)ctx->r8, 0);
     // 0x00291050: lw          $a0, 0xC($a0)
     ctx->r4 = MEM_W(ctx->r4, 0XC);
     // 0x00291054: jal         0x0029DA10

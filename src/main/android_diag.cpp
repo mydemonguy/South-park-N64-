@@ -46,6 +46,10 @@ namespace southpark::crashlog {
     void write_raw(const char* data, size_t n);
 }
 
+// Game demand paging (src/game/southpark_os.cpp): a TLB miss on one of the game's VM
+// regions arrives here as SIGSEGV and is serviced before anything is reported.
+extern "C" bool southpark_tlb_handle_fault(uintptr_t host_addr);
+
 namespace goemon64::diag {
 
     // App lifecycle phase, set from the SDL event pump (main thread) and read
@@ -128,6 +132,9 @@ namespace goemon64::diag {
 
         void crash_handler(int sig, siginfo_t* info, void* ucontext) {
             const uintptr_t fault = reinterpret_cast<uintptr_t>(info ? info->si_addr : nullptr);
+            if ((sig == SIGSEGV || sig == SIGBUS) && southpark_tlb_handle_fault(fault)) {
+                return; // page mapped; the faulting instruction retries
+            }
             const uintptr_t base = g_rdram_base.load(std::memory_order_relaxed);
             const int phase = g_phase.load(std::memory_order_relaxed);
 

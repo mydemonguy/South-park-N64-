@@ -12,6 +12,11 @@
 //                           (0x00200000 + phys, block 2 at 0x00400000). RDRAM is moved
 //                           into a shared-memory object so physical pages can be mapped a
 //                           second time at the virtual address.
+//   * Demand paging       - the game streams ROM data through virtual "regions" above
+//                           the fixed 0x00400000 block and relies on TLB-miss exceptions
+//                           to page them in (its handler is func_002903DC). There are no
+//                           CPU exceptions under the recompiler, so the host SIGSEGV
+//                           handler pages them in instead (southpark_tlb_handle_fault).
 //   * sp_cart_io_read/write - PI I/O helpers used by the game's streaming code.
 //   * Stand-ins for libultra internals that recompiled game code still calls (SI
 //     access for Controller Pak / reset paths) and guards for internals that should
@@ -99,6 +104,76 @@ namespace {
     int rdram_fd = -1;
     uint8_t* tlb_rdram = nullptr;
     std::mutex tlb_mutex;
+
+    // ---- Demand paging (see southpark_tlb_handle_fault) ----
+    //
+    // The game's VM manager (func_00290B10's thread) keeps a linked list of virtual
+    // regions, each backed by a contiguous range of ROM:
+    //   +0x00 next node (KSEG0)
+    //   +0x04 u16 first virtual page (vaddr >> 12)
+    //   +0x06 u16 page count
+    //   +0x08 ROM address of the first page
+    //   +0x10 per-page frame table (0xFF = not resident)
+    // The list head is the fixed block at 0x00400000 (mapped with osMapTLB index 0); new
+    // regions are appended after the last one (func_00290FAC). On hardware a TLB miss
+    // DMAs the 4 KB page from ROM into one of a few dozen frames at phys 0x106000 and
+    // maps it. Here every touched page gets its own host page, filled from ROM once,
+    // and is dropped again when its region is freed or its range is reused.
+    constexpr uint32_t vm_region_head = 0x800EB9F0u;
+    constexpr uint32_t vm_page = 0x1000u;
+    constexpr uint32_t vm_max_vpages = 0x10000u;   // vpage is a u16 in the region nodes
+
+    std::atomic_flag vm_lock = ATOMIC_FLAG_INIT;   // taken from the signal handler: no mutex
+    uint64_t vm_paged[vm_max_vpages / 64]{};       // 4 KB pages this file has mapped
+    size_t host_page_size = 4096;
+    std::atomic<uint32_t> vm_pages_in{0};
+
+    struct VmLock {
+        VmLock() { while (vm_lock.test_and_set(std::memory_order_acquire)) {} }
+        ~VmLock() { vm_lock.clear(std::memory_order_release); }
+    };
+
+    bool vm_is_paged(uint32_t vpage) { return (vm_paged[vpage >> 6] >> (vpage & 63)) & 1; }
+    void vm_set_paged(uint32_t vpage, bool on) {
+        uint64_t bit = 1ull << (vpage & 63);
+        vm_paged[vpage >> 6] = on ? (vm_paged[vpage >> 6] | bit) : (vm_paged[vpage >> 6] & ~bit);
+    }
+
+    // Region node covering vpage, or 0. Reads game memory directly; only valid KSEG0
+    // RDRAM node pointers are followed, so a half-built list can't send us astray.
+    uint32_t vm_find_region(uint8_t* rdram, uint32_t vpage, uint32_t* rom_addr_out) {
+        uint32_t node = vm_region_head;
+        for (int guard = 0; guard < 512 && node != 0; guard++) {
+            if (node < 0x80000000u || node >= 0x80000000u + phys_ram_size - 0x18) {
+                return 0;
+            }
+            gpr n = (gpr)(int32_t)node;
+            uint32_t start = MEM_HU(0x4, n);
+            uint32_t count = MEM_HU(0x6, n);
+            if (vpage >= start && vpage < start + count) {
+                *rom_addr_out = (uint32_t)MEM_W(0x8, n) + (vpage - start) * vm_page;
+                return node;
+            }
+            node = (uint32_t)MEM_W(0x0, n);
+        }
+        return 0;
+    }
+
+    // Copy one 4 KB page from ROM into host memory in RDRAM byte order (big-endian
+    // words stored native, as the runtime's DMA does).
+    void vm_fill_page(uint8_t* dst, uint32_t rom_addr) {
+        std::span<const uint8_t> rom = recomp::get_rom();
+        uint64_t off = rom_addr & 0x0FFFFFFFu;   // plain offset, or 0x10000000/0xB0000000 based
+        uint32_t* out = reinterpret_cast<uint32_t*>(dst);
+        for (uint32_t i = 0; i < vm_page / 4; i++, off += 4) {
+            uint32_t w = 0;
+            if (off + 4 <= rom.size()) {
+                std::memcpy(&w, rom.data() + off, 4);
+                w = __builtin_bswap32(w);
+            }
+            out[i] = w;
+        }
+    }
 }
 
 // Call once, on the game thread, before any game code runs. Moves the first 8 MB of
@@ -140,6 +215,7 @@ extern "C" bool southpark_init_tlb_memory(uint8_t* rdram) {
     }
     rdram_fd = fd;
     tlb_rdram = rdram;
+    host_page_size = (size_t)sysconf(_SC_PAGESIZE);
 
     // Uncached KSEG1 view of RAM (0xA0000000 + phys): same pages, mapped again. Game
     // and libultra code sometimes address RAM this way; without the mirror those
@@ -236,6 +312,88 @@ extern "C" void southpark_map_boot_tlb(uint8_t* rdram) {
     std::lock_guard lock{ tlb_mutex };
     tlb_map_page(62, 0x00200000, 0x00000000, 0x100000);
     tlb_map_page(63, 0x00300000, 0x00100000, 0x100000);
+}
+
+// Called first thing from the SIGSEGV/SIGBUS handler with the faulting host address.
+// If it is an unmapped page of one of the game's VM regions, map a host page there,
+// fill it from ROM and return true: the faulting instruction then simply retries.
+// Uses only raw syscalls and memory reads (no allocation, no mutex).
+extern "C" bool southpark_tlb_handle_fault(uintptr_t host_addr) {
+#if defined(_WIN32)
+    (void)host_addr;
+    return false;
+#else
+    uint8_t* rdram = tlb_rdram;
+    if (rdram == nullptr || rdram_fd < 0) {
+        return false;
+    }
+    const uintptr_t kuseg = reinterpret_cast<uintptr_t>(rdram) + host_offset(0);
+    if (host_addr < kuseg || host_addr >= kuseg + (uintptr_t)vm_max_vpages * vm_page) {
+        return false;
+    }
+    const uint32_t vaddr = (uint32_t)(host_addr - kuseg);
+    const size_t hp = host_page_size;
+    const uint32_t hp_vaddr = vaddr & ~(uint32_t)(hp - 1);
+    const uint32_t first_vpage = hp_vaddr / vm_page;
+    const uint32_t sub_pages = (uint32_t)(hp / vm_page);
+
+    VmLock lock;
+    uint32_t rom_addr = 0;
+    if (vm_is_paged(vaddr / vm_page) || vm_find_region(rdram, vaddr / vm_page, &rom_addr) == 0) {
+        return false; // not ours (or already mapped and faulting for another reason)
+    }
+    uint8_t* host = rdram + host_offset(hp_vaddr);
+    void* p = mmap(host, hp, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+    if (p == MAP_FAILED) {
+        return false;
+    }
+    // A host page larger than 4 KB can span pages of neighbouring regions: fill each.
+    for (uint32_t i = 0; i < sub_pages; i++) {
+        uint32_t vp = first_vpage + i;
+        if (vp < vm_max_vpages && vm_find_region(rdram, vp, &rom_addr) != 0) {
+            vm_fill_page(host + (size_t)i * vm_page, rom_addr);
+        }
+        if (vp < vm_max_vpages) {
+            vm_set_paged(vp, true);
+        }
+    }
+    vm_pages_in.fetch_add(1, std::memory_order_relaxed);
+    return true;
+#endif
+}
+
+// Hook (southpark.us.toml [[patches.hook]]) in the VM manager when a region is created
+// (func_00290FAC, node in $t0) or freed (func_00290EAC, node in $s0). Drops any pages
+// paged in for that virtual range so a reused range refaults with the new ROM data.
+extern "C" void southpark_vm_region_changed(uint8_t* rdram, uint32_t node, int freed) {
+    gpr n = (gpr)(int32_t)node;
+    uint32_t start = MEM_HU(0x4, n);
+    uint32_t count = MEM_HU(0x6, n);
+    uint32_t rom_addr = (uint32_t)MEM_W(0x8, n);
+    uint32_t dropped = 0;
+#if !defined(_WIN32)
+    if (tlb_rdram != nullptr) {
+        VmLock lock;
+        const uint32_t sub_pages = (uint32_t)(host_page_size / vm_page);
+        uint32_t vp = start - (start % sub_pages);
+        for (; vp < start + count && vp < vm_max_vpages; vp += sub_pages) {
+            bool any = false;
+            for (uint32_t i = 0; i < sub_pages; i++) {
+                any |= vm_is_paged(vp + i);
+                vm_set_paged(vp + i, false);
+            }
+            if (any) {
+                // Put the reserved, inaccessible mapping back.
+                mmap(tlb_rdram + host_offset(vp * vm_page), host_page_size, PROT_NONE,
+                     MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
+                dropped++;
+            }
+        }
+    }
+#endif
+    std::fprintf(stderr, "[southpark] VM region %s vaddr=0x%08X pages=0x%X rom=0x%08X (dropped %u, paged in %u so far)\n",
+                 freed ? "freed" : "created", start * vm_page, count, rom_addr, dropped,
+                 vm_pages_in.load(std::memory_order_relaxed));
 }
 
 // ---- Events and PI ----

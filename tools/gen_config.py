@@ -89,6 +89,19 @@ value = 0x03E00008   # jr ra
 func = "func_00404D24"
 vram = 0x00404D2C
 value = 0x27BDFFE8   # addiu sp, sp, -0x18 (delay slot, as in the original)
+
+# Demand paging: the VM manager's region create (func_00290FAC, new node in $t0) and
+# free (func_00290EAC, unlinked node in $s0) tell the runtime, which pages regions in
+# from its SIGSEGV handler and must drop them when a virtual range is reused.
+[[patches.hook]]
+func = "func_00290FAC"
+before_vram = 0x00291050
+text = "southpark_vm_region_changed(rdram, (uint32_t)ctx->r8, 0);"
+
+[[patches.hook]]
+func = "func_00290EAC"
+before_vram = 0x00290F10
+text = "southpark_vm_region_changed(rdram, (uint32_t)ctx->r16, 1);"
 """
 open(config_path, "w").write(out)
 print(f"{len(set(custom))} custom (ignored), {len(set(stubs))} stubbed")
