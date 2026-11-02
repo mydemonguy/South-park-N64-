@@ -82,6 +82,14 @@ android {
     }
 
     signingConfigs {
+        // Fixed debug key committed to this (private) repo so every CI build has the
+        // same signature and installs over the previous one, keeping the ROM and saves.
+        debug {
+            storeFile file('southpark-debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
         release {
             if (keystorePropertiesFile.exists()) {
                 def rawPath = keystoreProperties['storeFile']
@@ -112,6 +120,7 @@ android {
             ndk { debugSymbolLevel 'SYMBOL_TABLE' }
         }
         debug {
+            signingConfig signingConfigs.debug
             // Debug-signed APK for quick sideloading, but build the NATIVE code optimized.
             // The NDK toolchain injects -O0 -g for a "Debug" CMAKE_BUILD_TYPE, and the software
             // N64 recompiler + RT64 Vulkan renderer stutter badly at -O0. Force RelWithDebInfo

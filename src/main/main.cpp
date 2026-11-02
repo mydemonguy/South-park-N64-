@@ -390,9 +390,10 @@ gpr get_entrypoint_address();
 // uses odd float registers on their own. The game's own libultra code that would set
 // FR is stubbed (it touches CP0), so set it for the boot thread and every new thread.
 static void southpark_set_fr(recomp_context* ctx) {
-    constexpr gpr SR_CU1 = 0x20000000;
-    constexpr gpr SR_FR  = 0x04000000;
-    cop0_status_write(ctx, (gpr)ctx->status_reg | SR_CU1 | SR_FR);
+    // Only FR: the runtime treats a change to any other status bit as fatal
+    // ("Unhandled status register bits changed").
+    constexpr gpr SR_FR = 0x04000000;
+    cop0_status_write(ctx, (gpr)ctx->status_reg | SR_FR);
 }
 
 extern "C" bool southpark_init_tlb_memory(uint8_t* rdram);

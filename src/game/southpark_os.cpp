@@ -344,7 +344,12 @@ extern "C" void __osSiRawWriteIo_recomp(uint8_t* rdram, recomp_context* ctx) { (
 
 // ---- Status register helpers ----
 extern "C" void __osGetSR_recomp(uint8_t* rdram, recomp_context* ctx) { (void)rdram; ctx->r2 = cop0_status_read(ctx); }
-extern "C" void __osSetSR_recomp(uint8_t* rdram, recomp_context* ctx) { (void)rdram; cop0_status_write(ctx, ctx->r4); }
+// Only the FR bit is meaningful to the runtime; any other changed bit is fatal there.
+extern "C" void __osSetSR_recomp(uint8_t* rdram, recomp_context* ctx) {
+    (void)rdram;
+    constexpr uint32_t SR_FR = 0x04000000;
+    cop0_status_write(ctx, (gpr)((ctx->status_reg & ~SR_FR) | ((uint32_t)ctx->r4 & SR_FR)));
+}
 
 // ---- Internals that are only reachable from unused duplicate code ----
 // (__osViSwapContext is already stubbed in unknown_symbols.cpp.)
