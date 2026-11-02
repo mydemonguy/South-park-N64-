@@ -20,6 +20,7 @@
 // Function names here match tools/libultra_names.json and southpark.us.toml.
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
@@ -197,6 +198,8 @@ extern "C" void sp_osMapTLB(uint8_t* rdram, recomp_context* ctx) {
     uint32_t even = (uint32_t)ctx->r7;
     uint32_t odd = (uint32_t)MEM_W(0x10, ctx->r29);
     size_t page = (size_t)(((pm >> 13) & 0xFFF) + 1) * 0x1000;
+    std::fprintf(stderr, "[southpark] osMapTLB idx=%d vaddr=0x%08X even=0x%08X odd=0x%08X page=0x%zX\n",
+                 index, vaddr, even, odd, page);
     std::lock_guard lock{ tlb_mutex };
     tlb_map_page(index * 2, vaddr & ~(uint32_t)(page * 2 - 1), even, page);
     tlb_map_page(index * 2 + 1, (vaddr & ~(uint32_t)(page * 2 - 1)) + (uint32_t)page, odd, page);
@@ -247,6 +250,12 @@ extern "C" void sp_osPiRawStartDma(uint8_t* rdram, recomp_context* ctx) {
     gpr dram = ctx->r6;
     uint32_t size = (uint32_t)ctx->r7;
 
+    static std::atomic<uint32_t> dma_count{0};
+    uint32_t nth = dma_count.fetch_add(1);
+    if (nth < 48 || (nth % 500) == 0) {
+        std::fprintf(stderr, "[southpark] PI DMA #%u dir=%u rom=0x%08X -> 0x%08X size=0x%X\n",
+                     nth, direction, phys, (uint32_t)dram, size);
+    }
     if (direction == OS_READ) {
         std::span<const uint8_t> rom = recomp::get_rom();
         uint64_t off = (uint64_t)phys - recomp::rom_base;

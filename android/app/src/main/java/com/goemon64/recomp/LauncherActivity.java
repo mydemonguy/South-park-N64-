@@ -80,6 +80,28 @@ public class LauncherActivity extends AppCompatActivity {
         progressText = findViewById(R.id.progressText);
         ioExecutor = Executors.newSingleThreadExecutor();
 
+        // South Park testing aid: if the last game session didn't finish (crash or the
+        // app was closed while playing), show the end of its log so it can be copied.
+        File lastSessionDir = DataPaths.dataDir(this);
+        if (lastSessionDir != null) {
+            File marker = new File(lastSessionDir, "running.marker");
+            if (marker.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                marker.delete();
+                showLastSessionDialog(readTail(new File(lastSessionDir, "session.log"), 24 * 1024));
+                return;   // continues in continueStartup()
+            }
+        }
+        continueStartup();
+    }
+
+    private boolean startupContinued = false;
+
+    private void continueStartup() {
+        if (startupContinued) {
+            return;
+        }
+        startupContinued = true;
         // A user-supplied Vulkan driver that took the process down last launch has
         // to be deselected before the game is started again, and the user told why
         // — otherwise the driver silently stops being used and the next report is
@@ -106,6 +128,57 @@ public class LauncherActivity extends AppCompatActivity {
         }
 
         beginStorageSetup();
+    }
+
+    private static String readTail(File f, int maxBytes) {
+        if (!f.exists()) {
+            return "(no session.log found)";
+        }
+        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "r")) {
+            long len = raf.length();
+            long start = Math.max(0, len - maxBytes);
+            byte[] buf = new byte[(int) (len - start)];
+            raf.seek(start);
+            raf.readFully(buf);
+            String text = new String(buf, java.nio.charset.StandardCharsets.UTF_8);
+            return start > 0 ? "...\n" + text.substring(Math.max(0, text.indexOf('\n') + 1)) : text;
+        } catch (IOException e) {
+            return "(could not read session.log: " + e.getMessage() + ")";
+        }
+    }
+
+    private void showLastSessionDialog(String log) {
+        android.widget.TextView text = new android.widget.TextView(this);
+        text.setText(log);
+        text.setTextIsSelectable(true);
+        text.setTypeface(android.graphics.Typeface.MONOSPACE);
+        text.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 10);
+        int pad = (int) (12 * getResources().getDisplayMetrics().density);
+        text.setPadding(pad, pad, pad, pad);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.addView(text);
+        scroll.post(() -> scroll.fullScroll(android.view.View.FOCUS_DOWN));
+
+        new AlertDialog.Builder(this)
+                .setTitle("Last game session didn't finish")
+                .setView(scroll)
+                .setPositiveButton("Copy log", (d, w) -> {
+                    android.content.ClipboardManager cm =
+                            (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    if (cm != null) {
+                        cm.setPrimaryClip(android.content.ClipData.newPlainText("South Park 64 log", log));
+                        android.widget.Toast.makeText(this, "Log copied", android.widget.Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNeutralButton("Share", (d, w) -> {
+                    Intent send = new Intent(Intent.ACTION_SEND);
+                    send.setType("text/plain");
+                    send.putExtra(Intent.EXTRA_TEXT, log);
+                    startActivity(Intent.createChooser(send, "Share log"));
+                })
+                .setNegativeButton("Continue", null)
+                .setOnDismissListener(d -> continueStartup())
+                .show();
     }
 
     /**

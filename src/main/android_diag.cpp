@@ -23,11 +23,16 @@
 #if defined(__ANDROID__)
 
 #include <atomic>
+#include <cstdarg>
 #include <csignal>
 #include <cstdint>
 #include <cstring>
 
 #include <android/log.h>
+#include <dlfcn.h>
+#include <ucontext.h>
+#include <unwind.h>
+#include <cstdio>
 #include <pthread.h>
 #include <unistd.h>
 
@@ -36,6 +41,10 @@
 #define DIAG_TAG "Goemon64-diag"
 #define DIAGE(...) __android_log_print(ANDROID_LOG_ERROR, DIAG_TAG, __VA_ARGS__)
 #define DIAGI(...) __android_log_print(ANDROID_LOG_INFO,  DIAG_TAG, __VA_ARGS__)
+
+namespace southpark::crashlog {
+    void write_raw(const char* data, size_t n);
+}
 
 namespace goemon64::diag {
 
@@ -63,8 +72,58 @@ namespace goemon64::diag {
     }
 
     namespace {
+        // Crash report into the session log (see southpark_crashlog.cpp), so it can be
+        // read on the device without adb. snprintf/dladdr aren't strictly
+        // async-signal-safe, but the process is dying anyway.
+        void report(const char* fmt, ...) __attribute__((format(printf, 1, 2)));
+        void report(const char* fmt, ...) {
+            char buf[512];
+            va_list ap;
+            va_start(ap, fmt);
+            int n = vsnprintf(buf, sizeof(buf) - 1, fmt, ap);
+            va_end(ap);
+            if (n < 0) return;
+            if (n > (int)sizeof(buf) - 2) n = sizeof(buf) - 2;
+            buf[n++] = '\n';
+            southpark::crashlog::write_raw(buf, (size_t)n);
+        }
+
+        void report_symbol(const char* label, uintptr_t pc) {
+            Dl_info info{};
+            if (pc != 0 && dladdr(reinterpret_cast<void*>(pc), &info) && info.dli_fname) {
+                const char* lib = strrchr(info.dli_fname, '/');
+                lib = lib ? lib + 1 : info.dli_fname;
+                if (info.dli_sname) {
+                    report("  %s %s+0x%zx (%s)", label, info.dli_sname,
+                           static_cast<size_t>(pc - reinterpret_cast<uintptr_t>(info.dli_saddr)), lib);
+                } else {
+                    report("  %s %s+0x%zx", label, lib,
+                           static_cast<size_t>(pc - reinterpret_cast<uintptr_t>(info.dli_fbase)));
+                }
+            } else {
+                report("  %s 0x%zx", label, static_cast<size_t>(pc));
+            }
+        }
+
+        struct BacktraceState { int count; };
+        _Unwind_Reason_Code backtrace_frame(struct _Unwind_Context* uc, void* arg) {
+            auto* st = static_cast<BacktraceState*>(arg);
+            uintptr_t pc = _Unwind_GetIP(uc);
+            if (pc != 0) {
+                char label[16];
+                snprintf(label, sizeof(label), "#%02d", st->count);
+                report_symbol(label, pc);
+            }
+            return ++st->count >= 32 ? _URC_END_OF_STACK : _URC_NO_REASON;
+        }
+    }
+
+    namespace {
         struct sigaction g_prev_segv{};
         struct sigaction g_prev_bus{};
+        struct sigaction g_prev_abrt{};
+        struct sigaction g_prev_ill{};
+        struct sigaction g_prev_fpe{};
         std::atomic<bool> g_installed{false};
 
         void crash_handler(int sig, siginfo_t* info, void* ucontext) {
@@ -80,6 +139,30 @@ namespace goemon64::diag {
                   static_cast<size_t>(fault), tname,
                   phase == Foreground ? "FOREGROUND" :
                   phase == Background ? "BACKGROUND" : "RESUMING");
+
+            report("==== CRASH: signal %d (%s) fault_addr=0x%zx thread='%s' ====",
+                   sig, sig == SIGSEGV ? "SIGSEGV" : sig == SIGBUS ? "SIGBUS" :
+                        sig == SIGABRT ? "SIGABRT" : sig == SIGILL ? "SIGILL" : sig == SIGFPE ? "SIGFPE" : "?",
+                   static_cast<size_t>(fault), tname);
+            if (base != 0 && fault >= base && fault < base + recomp::allocation_size) {
+                const uintptr_t off = fault - base;
+                // RDRAM offset -> N64 address (offsets past 2 GB are positive KUSEG/TLB addresses).
+                const uint32_t n64 = off < 0x80000000ull ? static_cast<uint32_t>(0x80000000u + off)
+                                                         : static_cast<uint32_t>(off - 0x80000000ull);
+                report("  N64 address 0x%08X (rdram offset 0x%zx)", n64, static_cast<size_t>(off));
+            }
+#if defined(__aarch64__)
+            if (ucontext) {
+                const auto* uc = static_cast<const ucontext_t*>(ucontext);
+                report_symbol("pc", static_cast<uintptr_t>(uc->uc_mcontext.pc));
+                report_symbol("lr", static_cast<uintptr_t>(uc->uc_mcontext.regs[30]));
+            }
+#endif
+            {
+                BacktraceState st{0};
+                _Unwind_Backtrace(backtrace_frame, &st);
+            }
+            report("==== end of crash report ====");
 
             if (base != 0 && fault >= base && fault < base + recomp::allocation_size) {
                 const uintptr_t off = fault - base;
@@ -97,7 +180,10 @@ namespace goemon64::diag {
 
             // Chain to the previously-installed handler so the normal Android
             // tombstone/debuggerd path still runs.
-            const struct sigaction& prev = (sig == SIGBUS) ? g_prev_bus : g_prev_segv;
+            const struct sigaction& prev = (sig == SIGBUS) ? g_prev_bus :
+                                           (sig == SIGABRT) ? g_prev_abrt :
+                                           (sig == SIGILL) ? g_prev_ill :
+                                           (sig == SIGFPE) ? g_prev_fpe : g_prev_segv;
             if (prev.sa_flags & SA_SIGINFO) {
                 if (prev.sa_sigaction) {
                     prev.sa_sigaction(sig, info, ucontext);
@@ -125,6 +211,9 @@ namespace goemon64::diag {
         sigemptyset(&sa.sa_mask);
         sigaction(SIGSEGV, &sa, &g_prev_segv);
         sigaction(SIGBUS, &sa, &g_prev_bus);
+        sigaction(SIGABRT, &sa, &g_prev_abrt);
+        sigaction(SIGILL, &sa, &g_prev_ill);
+        sigaction(SIGFPE, &sa, &g_prev_fpe);
         DIAGI("crash diagnostics handler installed");
     }
 

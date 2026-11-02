@@ -7,6 +7,7 @@
 #include <numeric>
 #include <stdexcept>
 #include <cinttypes>
+#include <atomic>
 
 #if !defined(__ANDROID__)
 #include "nfd.h"
@@ -63,6 +64,17 @@
 #endif
 
 #include "../../lib/rt64/src/contrib/stb/stb_image.h"
+
+#if defined(__ANDROID__)
+#include <fcntl.h>
+#endif
+
+namespace southpark::crashlog {
+    void start(const std::filesystem::path& dir);
+    void write_raw(const char* data, size_t n);
+    void write_line(const std::string& line);
+    void mark_game_running();
+}
 
 // Defined by the build from the release tag (see CMakeLists.txt / build.gradle).
 // The fallback only applies to local host builds that don't pass it in.
@@ -387,12 +399,15 @@ extern "C" bool southpark_init_tlb_memory(uint8_t* rdram);
 extern "C" void southpark_map_boot_tlb(uint8_t* rdram);
 
 static void southpark_entrypoint(uint8_t* rdram, recomp_context* ctx) {
+    southpark::crashlog::mark_game_running();
     southpark_set_fr(ctx);
     // Data at TLB-mapped addresses needs RDRAM in shared memory; then recreate the
     // mapping the (patched-out) boot stub would have made.
-    if (southpark_init_tlb_memory(rdram)) {
+    bool tlb_ok = southpark_init_tlb_memory(rdram);
+    if (tlb_ok) {
         southpark_map_boot_tlb(rdram);
     }
+    fprintf(stderr, "[southpark] entrypoint: shared RDRAM %s, starting game_boot\n", tlb_ok ? "ok" : "FAILED");
     // Code runs at TLB-mapped addresses; make indirect calls through them resolve.
     goemon64::register_tlb_code_aliases();
     recomp_entrypoint(rdram, ctx);
@@ -400,6 +415,8 @@ static void southpark_entrypoint(uint8_t* rdram, recomp_context* ctx) {
 
 static void southpark_thread_create(uint8_t* rdram, recomp_context* ctx) {
     (void)rdram;
+    static std::atomic<int> threads{0};
+    fprintf(stderr, "[southpark] game thread #%d created\n", threads.fetch_add(1));
     southpark_set_fr(ctx);
 }
 
@@ -616,26 +633,48 @@ void reorder_texture_pack(recomp::mods::ModContext&) {
 // Pump stdout/stderr into logcat so RmlUi's default logger, RT64 fprintf()
 // diagnostics, and our printf()s are visible via `adb logcat`. Without this,
 // libc's stdio goes to /dev/null on Android and UI/asset load failures are silent.
+static int g_stdio_pipe[2] = { -1, -1 };
+
+// Read whatever is still in the stdio pipe and append it to the session log. Called
+// from exit handlers so the last lines before a fatal exit() aren't lost.
+static void android_drain_stdio() {
+    if (g_stdio_pipe[0] < 0) return;
+    fflush(stdout);
+    fflush(stderr);
+    int flags = fcntl(g_stdio_pipe[0], F_GETFL, 0);
+    fcntl(g_stdio_pipe[0], F_SETFL, flags | O_NONBLOCK);
+    char buf[1024];
+    ssize_t n;
+    while ((n = read(g_stdio_pipe[0], buf, sizeof(buf))) > 0) {
+        southpark::crashlog::write_raw(buf, (size_t)n);
+    }
+    southpark::crashlog::write_line("[session] process exiting");
+}
+
 static void android_redirect_stdio_to_logcat() {
     static bool started = false;
     if (started) return;
     started = true;
+    southpark::crashlog::start(goemon64::android_program_path());
     setvbuf(stdout, nullptr, _IOLBF, 0);
     setvbuf(stderr, nullptr, _IONBF, 0);
-    static int fds[2];
-    if (pipe(fds) != 0) return;
-    dup2(fds[1], STDOUT_FILENO);
-    dup2(fds[1], STDERR_FILENO);
+    if (pipe(g_stdio_pipe) != 0) return;
+    dup2(g_stdio_pipe[1], STDOUT_FILENO);
+    dup2(g_stdio_pipe[1], STDERR_FILENO);
+    std::atexit(android_drain_stdio);
+    std::at_quick_exit(android_drain_stdio);
     std::thread([]{
         char buf[512];
         ssize_t n;
         std::string line;
-        while ((n = read(fds[0], buf, sizeof(buf) - 1)) > 0) {
+        while ((n = read(g_stdio_pipe[0], buf, sizeof(buf) - 1)) > 0) {
             buf[n] = '\0';
             line += buf;
             size_t pos;
             while ((pos = line.find('\n')) != std::string::npos) {
-                __android_log_write(ANDROID_LOG_INFO, "Goemon64-stdio", line.substr(0, pos).c_str());
+                std::string one = line.substr(0, pos);
+                __android_log_write(ANDROID_LOG_INFO, "SouthPark64-stdio", one.c_str());
+                southpark::crashlog::write_line(one);
                 line.erase(0, pos + 1);
             }
         }
