@@ -47898,7 +47898,7 @@ RECOMP_FUNC void func_0021A8D0(uint8_t* rdram, recomp_context* ctx) {
     // 0x0021A974: jal         0x0029D378
     // 0x0021A978: nop
 
-    func_0029D378(rdram, ctx);
+    osGetTime_recomp(rdram, ctx);
         goto after_2;
     // 0x0021A978: nop
 

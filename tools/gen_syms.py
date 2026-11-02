@@ -1,6 +1,9 @@
 """Build an N64Recomp symbol file for South Park (USA) from spimdisasm function info.
 
-Usage: python3 -I gen_syms.py <rom.z64> <finfo_main.csv> <finfo_block2.csv> <out.toml>
+Usage: python3 -I gen_syms.py <rom.z64> <finfo_main.csv> <finfo_block2.csv> <out.toml> [names.json]
+
+names.json (tools/libultra_names.json) maps vram -> [name, evidence] for identified
+functions; everything else is named func_XXXXXXXX.
 
 Fixes applied on top of spimdisasm's function list:
   * Call targets that land 4 bytes into a function become function starts. The 4-byte
@@ -14,6 +17,8 @@ import csv
 import re
 import struct
 import sys
+
+import json
 
 import rabbitizer
 
@@ -151,6 +156,9 @@ def emit_section(out, sec, funcs):
 
 
 def main():
+    if len(sys.argv) > 5:
+        for k, v in json.load(open(sys.argv[5]))["names"].items():
+            KNOWN_NAMES[int(k, 16)] = v[0]
     rom = open(sys.argv[1], "rb").read()
     main_funcs, main_refs = load_csv(sys.argv[2])
     b2_funcs, b2_refs = load_csv(sys.argv[3])

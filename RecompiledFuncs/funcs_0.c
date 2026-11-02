@@ -19971,7 +19971,7 @@ L_00206F60:
     // 0x00206F60: jal         0x002A0500
     // 0x00206F64: nop
 
-    func_002A0500(rdram, ctx);
+    osWritebackDCacheAll_recomp(rdram, ctx);
         goto after_0;
     // 0x00206F64: nop
 
@@ -20165,7 +20165,7 @@ RECOMP_FUNC void func_00207044(uint8_t* rdram, recomp_context* ctx) {
     // 0x0020708C: jal         0x002A0388
     // 0x00207090: ori         $a0, $v0, 0x400
     ctx->r4 = ctx->r2 | 0X400;
-    func_002A0388(rdram, ctx);
+    __osSetFpcCsr_recomp(rdram, ctx);
         goto after_2;
     // 0x00207090: ori         $a0, $v0, 0x400
     ctx->r4 = ctx->r2 | 0X400;
@@ -20187,7 +20187,7 @@ RECOMP_FUNC void func_00207044(uint8_t* rdram, recomp_context* ctx) {
     // 0x002070A8: jal         0x0029C910
     // 0x002070AC: addiu       $a0, $zero, 0xFE
     ctx->r4 = ADD32(0, 0XFE);
-    func_0029C910(rdram, ctx);
+    osCreateViManager_recomp(rdram, ctx);
         goto after_4;
     // 0x002070AC: addiu       $a0, $zero, 0xFE
     ctx->r4 = ADD32(0, 0XFE);
@@ -20195,7 +20195,7 @@ RECOMP_FUNC void func_00207044(uint8_t* rdram, recomp_context* ctx) {
     // 0x002070B0: jal         0x0029C778
     // 0x002070B4: addiu       $a0, $zero, 0x1
     ctx->r4 = ADD32(0, 0X1);
-    func_0029C778(rdram, ctx);
+    osViBlack_recomp(rdram, ctx);
         goto after_5;
     // 0x002070B4: addiu       $a0, $zero, 0x1
     ctx->r4 = ADD32(0, 0X1);
@@ -20227,7 +20227,7 @@ RECOMP_FUNC void func_00207044(uint8_t* rdram, recomp_context* ctx) {
     // 0x002070D8: jal         0x0029CE68
     // 0x002070DC: nop
 
-    func_0029CE68(rdram, ctx);
+    osViSwapBuffer_recomp(rdram, ctx);
         goto after_8;
     // 0x002070DC: nop
 
@@ -20235,7 +20235,7 @@ RECOMP_FUNC void func_00207044(uint8_t* rdram, recomp_context* ctx) {
     // 0x002070E0: jal         0x0029C778
     // 0x002070E4: addu        $a0, $zero, $zero
     ctx->r4 = ADD32(0, 0);
-    func_0029C778(rdram, ctx);
+    osViBlack_recomp(rdram, ctx);
         goto after_9;
     // 0x002070E4: addu        $a0, $zero, $zero
     ctx->r4 = ADD32(0, 0);
@@ -20416,7 +20416,7 @@ L_00207170:
     // 0x0020722C: jal         0x0029D1F8
     // 0x00207230: sw          $v1, 0x31C($s1)
     MEM_W(0X31C, ctx->r17) = ctx->r3;
-    func_0029D1F8(rdram, ctx);
+    osCreateMesgQueue_recomp(rdram, ctx);
         goto after_10;
     // 0x00207230: sw          $v1, 0x31C($s1)
     MEM_W(0X31C, ctx->r17) = ctx->r3;
@@ -20687,7 +20687,7 @@ L_002073A4:
     // 0x002073B0: jal         0x0029D8E8
     // 0x002073B4: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
-    func_0029D8E8(rdram, ctx);
+    osRecvMesg_recomp(rdram, ctx);
         goto after_23;
     // 0x002073B4: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
@@ -20927,7 +20927,7 @@ RECOMP_FUNC void func_002074B0(uint8_t* rdram, recomp_context* ctx) {
     // 0x002074E4: jal         0x0029D378
     // 0x002074E8: nop
 
-    func_0029D378(rdram, ctx);
+    osGetTime_recomp(rdram, ctx);
         goto after_0;
     // 0x002074E8: nop
 
@@ -21765,7 +21765,7 @@ RECOMP_FUNC void func_00207948(uint8_t* rdram, recomp_context* ctx) {
     // 0x00207960: jal         0x0029D378
     // 0x00207964: sw          $s0, 0x20($sp)
     MEM_W(0X20, ctx->r29) = ctx->r16;
-    func_0029D378(rdram, ctx);
+    osGetTime_recomp(rdram, ctx);
         goto after_0;
     // 0x00207964: sw          $s0, 0x20($sp)
     MEM_W(0X20, ctx->r29) = ctx->r16;
@@ -22188,7 +22188,7 @@ L_00207B98:
     // 0x00207BF8: jal         0x0029D378
     // 0x00207BFC: sw          $a0, 0x104($s3)
     MEM_W(0X104, ctx->r19) = ctx->r4;
-    func_0029D378(rdram, ctx);
+    osGetTime_recomp(rdram, ctx);
         goto after_11;
     // 0x00207BFC: sw          $a0, 0x104($s3)
     MEM_W(0X104, ctx->r19) = ctx->r4;
@@ -22355,7 +22355,7 @@ L_00207CCC:
     // 0x00207CD4: jal         0x0029DA10
     // 0x00207CD8: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
-    func_0029DA10(rdram, ctx);
+    osSendMesg_recomp(rdram, ctx);
         goto after_18;
     // 0x00207CD8: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
@@ -26549,7 +26549,7 @@ RECOMP_FUNC void func_002094B4(uint8_t* rdram, recomp_context* ctx) {
     // 0x002094F0: jal         0x0029D220
     // 0x002094F4: sw          $v1, 0x14($sp)
     MEM_W(0X14, ctx->r29) = ctx->r3;
-    func_0029D220(rdram, ctx);
+    osCreateThread_recomp(rdram, ctx);
         goto after_0;
     // 0x002094F4: sw          $v1, 0x14($sp)
     MEM_W(0X14, ctx->r29) = ctx->r3;
@@ -26557,7 +26557,7 @@ RECOMP_FUNC void func_002094B4(uint8_t* rdram, recomp_context* ctx) {
     // 0x002094F8: jal         0x0029DCF8
     // 0x002094FC: addu        $a0, $s0, $zero
     ctx->r4 = ADD32(ctx->r16, 0);
-    func_0029DCF8(rdram, ctx);
+    osStartThread_recomp(rdram, ctx);
         goto after_1;
     // 0x002094FC: addu        $a0, $s0, $zero
     ctx->r4 = ADD32(ctx->r16, 0);
@@ -26609,7 +26609,7 @@ RECOMP_FUNC void func_00209510(uint8_t* rdram, recomp_context* ctx) {
     // 0x0020954C: jal         0x0029D220
     // 0x00209550: sw          $v1, 0x14($sp)
     MEM_W(0X14, ctx->r29) = ctx->r3;
-    func_0029D220(rdram, ctx);
+    osCreateThread_recomp(rdram, ctx);
         goto after_0;
     // 0x00209550: sw          $v1, 0x14($sp)
     MEM_W(0X14, ctx->r29) = ctx->r3;
@@ -26617,7 +26617,7 @@ RECOMP_FUNC void func_00209510(uint8_t* rdram, recomp_context* ctx) {
     // 0x00209554: jal         0x0029DCF8
     // 0x00209558: addu        $a0, $s0, $zero
     ctx->r4 = ADD32(ctx->r16, 0);
-    func_0029DCF8(rdram, ctx);
+    osStartThread_recomp(rdram, ctx);
         goto after_1;
     // 0x00209558: addu        $a0, $s0, $zero
     ctx->r4 = ADD32(ctx->r16, 0);
@@ -26633,7 +26633,7 @@ RECOMP_FUNC void func_00209510(uint8_t* rdram, recomp_context* ctx) {
     // 0x0020956C: jal         0x0029DBA0
     // 0x00209570: addu        $a0, $zero, $zero
     ctx->r4 = ADD32(0, 0);
-    func_0029DBA0(rdram, ctx);
+    osSetThreadPri_recomp(rdram, ctx);
         goto after_2;
     // 0x00209570: addu        $a0, $zero, $zero
     ctx->r4 = ADD32(0, 0);
@@ -26663,7 +26663,7 @@ L_00209590:
     // 0x0020959C: jal         0x0029D8E8
     // 0x002095A0: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
-    func_0029D8E8(rdram, ctx);
+    osRecvMesg_recomp(rdram, ctx);
         goto after_3;
     // 0x002095A0: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
@@ -27314,7 +27314,7 @@ L_0020994C:
     // 0x00209958: jal         0x0029DA10
     // 0x0020995C: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
-    func_0029DA10(rdram, ctx);
+    osSendMesg_recomp(rdram, ctx);
         goto after_2;
     // 0x0020995C: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
@@ -27907,7 +27907,7 @@ RECOMP_FUNC void func_00209C78(uint8_t* rdram, recomp_context* ctx) {
     // 0x00209CB4: jal         0x0029D1F8
     // 0x00209CB8: sw          $v0, 0x31C($s3)
     MEM_W(0X31C, ctx->r19) = ctx->r2;
-    func_0029D1F8(rdram, ctx);
+    osCreateMesgQueue_recomp(rdram, ctx);
         goto after_0;
     // 0x00209CB8: sw          $v0, 0x31C($s3)
     MEM_W(0X31C, ctx->r19) = ctx->r2;
@@ -31815,7 +31815,7 @@ L_0020B258:
     // 0x0020B258: jal         0x0029CC68
     // 0x0020B25C: nop
 
-    func_0029CC68(rdram, ctx);
+    osViSetMode_recomp(rdram, ctx);
         goto after_0;
     // 0x0020B25C: nop
 
@@ -31827,7 +31827,7 @@ L_0020B258:
     // 0x0020B268: jal         0x0029CE20
     // 0x0020B26C: nop
 
-    func_0029CE20(rdram, ctx);
+    osViSetYScale_recomp(rdram, ctx);
         goto after_1;
     // 0x0020B26C: nop
 
@@ -31835,7 +31835,7 @@ L_0020B258:
     // 0x0020B270: jal         0x0029CCB8
     // 0x0020B274: addiu       $a0, $zero, 0x2
     ctx->r4 = ADD32(0, 0X2);
-    func_0029CCB8(rdram, ctx);
+    osViSetSpecialFeatures_recomp(rdram, ctx);
         goto after_2;
     // 0x0020B274: addiu       $a0, $zero, 0x2
     ctx->r4 = ADD32(0, 0X2);

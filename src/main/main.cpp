@@ -383,8 +383,16 @@ static void southpark_set_fr(recomp_context* ctx) {
     cop0_status_write(ctx, (gpr)ctx->status_reg | SR_CU1 | SR_FR);
 }
 
+extern "C" bool southpark_init_tlb_memory(uint8_t* rdram);
+extern "C" void southpark_map_boot_tlb(uint8_t* rdram);
+
 static void southpark_entrypoint(uint8_t* rdram, recomp_context* ctx) {
     southpark_set_fr(ctx);
+    // Data at TLB-mapped addresses needs RDRAM in shared memory; then recreate the
+    // mapping the (patched-out) boot stub would have made.
+    if (southpark_init_tlb_memory(rdram)) {
+        southpark_map_boot_tlb(rdram);
+    }
     // Code runs at TLB-mapped addresses; make indirect calls through them resolve.
     goemon64::register_tlb_code_aliases();
     recomp_entrypoint(rdram, ctx);

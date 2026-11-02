@@ -2,7 +2,7 @@
 
 A static recompilation of **South Park (N64, USA)** built with [N64: Recompiled](https://github.com/N64Recomp/N64Recomp), aimed at Android (arm64) with a Linux desktop build for testing. The app layer is a fork of [Goemon64Recomp-Android](https://github.com/ogdanimal/Goemon64Recomp-Android), with South Park's game layer swapped in.
 
-**Status: the game does not boot yet.** The app installs, opens and imports your ROM, but the game will most likely hang at a black screen. See "What's left" below.
+**Status: untested on a device.** The app installs and imports your ROM. libultra is identified and South Park's DMA, TLB and boot quirks are handled, but the game hasn't been run yet. Expect crashes to fix. See "What's left" below.
 
 This repository contains **no ROM and no game data**. It does contain the recompiled program code (`RecompiledFuncs/`, a machine translation of the game's MIPS code to C), so that CI can build without a ROM. **Keep this repository private.**
 
@@ -37,18 +37,32 @@ build-host-tools/file_to_c patches/patches.bin mm_patches_bin RecompiledPatches/
 
 ## South Park-specific runtime code
 
-- `src/main/main.cpp`: game registration (ROM hash, entry point). It sets FR = 1 for the boot thread and every game thread.
-- `src/main/register_overlays.cpp`: `register_tlb_code_aliases()` registers both TLB-mapped code sections at their mapped addresses so indirect calls resolve.
+- `src/main/main.cpp`: game registration (ROM hash, entry point). The entry wrapper sets FR = 1 (also for every new thread), moves RDRAM into shared memory, maps the boot TLB pages and registers the TLB code aliases.
+- `src/game/southpark_os.cpp`: South Park's OS layer:
+  - `sp_osPiRawStartDma`: the game runs its own DMA thread on `osPiRawStartDma`. This does the ROM copy and posts the PI event.
+  - `sp_osSetEventMesg`: records the PI/SI event queues (the runtime ignores OS_EVENT_PI), then forwards.
+  - `sp_osMapTLB` / `sp_osUnmapTLB` / `sp_osUnmapTLBAll`: real TLB emulation by mapping the shared RDRAM pages again at the virtual address.
+  - `sp_cart_io_read/write`: cart I/O used by the streaming code.
+  - Stand-ins for SI internals the Controller Pak paths call (they report "no accessory"), plus guards for internals that should be unreachable.
+- `src/main/register_overlays.cpp`: `register_tlb_code_aliases()` registers both mapped code sections at their mapped addresses so indirect calls resolve.
 - `include/sp_recomp.h`: float-to-int conversions that give the same results on x86 and ARM64.
 - `CMakeLists.txt`: the recompiled code builds with `-ffp-contract=off` (no fused multiply-add).
 
 `tools/difftest/` runs recompiled functions on x86-64 and ARM64 (qemu) with identical inputs and compares results: 475 of 486 tested functions match bit for bit, and the other 11 differ only in NaN bit patterns.
 
+## libultra identification
+
+`tools/libultra_names.json` names 87 functions, each with its evidence: n64sym signature matches (cross-checked against call targets) and structural identification against ultralib. That covers threads, message queues, events, timers, VI, AI, SP/DP, controllers and caches, so N64ModernRuntime replaces them. `tools/gen_config.py` writes the stub/ignore lists from the names. Notes:
+
+- The game doesn't use the PI manager (`osCreatePiManager`/`osPiStartDma`). It has its own DMA thread built on `osPiRawStartDma`.
+- `game_boot` copies the boot image by reading the cartridge directly. That loop is patched out (`southpark.us.toml`), because the runtime has already loaded the same 1 MB.
+- Controller Pak access goes through raw SI from game code, so saving to a Controller Pak won't work yet.
+
 ## What's left before it's playable
 
-1. **Name the libultra functions.** N64ModernRuntime replaces libultra (threads, message queues, PI/VI/SI, timers) by function name; until they're identified, the game runs its own hardware-level libultra and stalls. 34 functions that touch CP0 are stubbed for now.
-2. **Map block 2's TLB data.** RDRAM above 8 MB is protected, so block 2's reads and writes at `0x004xxxxx` will fault. The runtime needs to mirror those RDRAM pages at the mapped address when `map_tlb` runs.
-3. **Boot, then fix crashes.** Rendering and input then come from RT64 and the Goemon port's Android layer.
+1. **Boot and fix crashes.** The first run will show what's still missing: unidentified libultra calls, hardware access from game code, renderer issues.
+2. **Controller Pak saves.** Emulate the PIF/pak protocol for the game's raw SI path, or map its pak routines onto the runtime's `osPfs*`.
+3. **Verify the remaining structural names** (e.g. `osViSetSpecialFeatures`) as the game runs.
 
 ## Credits and license
 

@@ -17041,8 +17041,10 @@ RECOMP_FUNC void game_boot(uint8_t* rdram, recomp_context* ctx) {
     // 0x0022BD0C: ori         $a0, $a0, 0xFFFF
     ctx->r4 = ctx->r4 | 0XFFFF;
 L_0022BD10:
-    // 0x0022BD10: lw          $v0, 0x0($a3)
-    ctx->r2 = MEM_W(ctx->r7, 0X0);
+    // 0x0022BD10: b           L_0022BD44
+    // 0x0022BD14: andi        $v0, $v0, 0x3
+    ctx->r2 = ctx->r2 & 0X3;
+        goto L_0022BD44;
     // 0x0022BD14: andi        $v0, $v0, 0x3
     ctx->r2 = ctx->r2 & 0X3;
     // 0x0022BD18: beq         $v0, $zero, L_0022BD28
@@ -17081,6 +17083,7 @@ L_0022BD28:
     }
     // 0x0022BD40: addiu       $a1, $a1, 0x4
     ctx->r5 = ADD32(ctx->r5, 0X4);
+L_0022BD44:
     // 0x0022BD44: lui         $v1, 0x800C
     ctx->r3 = S32(0X800C << 16);
     // 0x0022BD48: addiu       $v1, $v1, 0x2000
@@ -17120,7 +17123,7 @@ L_0022BD74:
     // 0x0022BD74: jal         0x0029D3F8
     // 0x0022BD78: nop
 
-    func_0029D3F8(rdram, ctx);
+    osInitialize_recomp(rdram, ctx);
         goto after_0;
     // 0x0022BD78: nop
 
@@ -18996,7 +18999,7 @@ L_0022C254:
     // 0x0022C264: jal         0x0029D8E8
     // 0x0022C268: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
-    func_0029D8E8(rdram, ctx);
+    osRecvMesg_recomp(rdram, ctx);
         goto after_0;
     // 0x0022C268: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
@@ -19008,7 +19011,7 @@ L_0022C254:
     // 0x0022C274: jal         0x0029AA14
     // 0x0022C278: addu        $s2, $zero, $zero
     ctx->r18 = ADD32(0, 0);
-    func_0029AA14(rdram, ctx);
+    osContGetReadData_recomp(rdram, ctx);
         goto after_1;
     // 0x0022C278: addu        $s2, $zero, $zero
     ctx->r18 = ADD32(0, 0);
@@ -19328,7 +19331,7 @@ L_0022C484:
     // 0x0022C494: jal         0x0029D8E8
     // 0x0022C498: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
-    func_0029D8E8(rdram, ctx);
+    osRecvMesg_recomp(rdram, ctx);
         goto after_3;
     // 0x0022C498: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
@@ -19340,7 +19343,7 @@ L_0022C484:
     // 0x0022C4A4: jal         0x0029A960
     // 0x0022C4A8: addu        $s2, $zero, $zero
     ctx->r18 = ADD32(0, 0);
-    func_0029A960(rdram, ctx);
+    osContGetQuery_recomp(rdram, ctx);
         goto after_4;
     // 0x0022C4A8: addu        $s2, $zero, $zero
     ctx->r18 = ADD32(0, 0);
@@ -19546,7 +19549,7 @@ L_0022C254:
     // 0x0022C264: jal         0x0029D8E8
     // 0x0022C268: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
-    func_0029D8E8(rdram, ctx);
+    osRecvMesg_recomp(rdram, ctx);
         goto after_0;
     // 0x0022C268: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
@@ -19558,7 +19561,7 @@ L_0022C254:
     // 0x0022C274: jal         0x0029AA14
     // 0x0022C278: addu        $s2, $zero, $zero
     ctx->r18 = ADD32(0, 0);
-    func_0029AA14(rdram, ctx);
+    osContGetReadData_recomp(rdram, ctx);
         goto after_1;
     // 0x0022C278: addu        $s2, $zero, $zero
     ctx->r18 = ADD32(0, 0);
@@ -19878,7 +19881,7 @@ L_0022C484:
     // 0x0022C494: jal         0x0029D8E8
     // 0x0022C498: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
-    func_0029D8E8(rdram, ctx);
+    osRecvMesg_recomp(rdram, ctx);
         goto after_3;
     // 0x0022C498: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
@@ -19890,7 +19893,7 @@ L_0022C484:
     // 0x0022C4A4: jal         0x0029A960
     // 0x0022C4A8: addu        $s2, $zero, $zero
     ctx->r18 = ADD32(0, 0);
-    func_0029A960(rdram, ctx);
+    osContGetQuery_recomp(rdram, ctx);
         goto after_4;
     // 0x0022C4A8: addu        $s2, $zero, $zero
     ctx->r18 = ADD32(0, 0);
@@ -20054,7 +20057,7 @@ RECOMP_FUNC void func_0022C554(uint8_t* rdram, recomp_context* ctx) {
     // 0x0022C59C: jal         0x0029D1F8
     // 0x0022C5A0: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
-    func_0029D1F8(rdram, ctx);
+    osCreateMesgQueue_recomp(rdram, ctx);
         goto after_1;
     // 0x0022C5A0: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
@@ -20072,7 +20075,7 @@ RECOMP_FUNC void func_0022C554(uint8_t* rdram, recomp_context* ctx) {
     // 0x0022C5B8: jal         0x0029D1F8
     // 0x0022C5BC: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
-    func_0029D1F8(rdram, ctx);
+    osCreateMesgQueue_recomp(rdram, ctx);
         goto after_2;
     // 0x0022C5BC: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
@@ -20084,7 +20087,7 @@ RECOMP_FUNC void func_0022C554(uint8_t* rdram, recomp_context* ctx) {
     // 0x0022C5C8: jal         0x0029DB40
     // 0x0022C5CC: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
-    func_0029DB40(rdram, ctx);
+    sp_osSetEventMesg(rdram, ctx);
         goto after_3;
     // 0x0022C5CC: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
@@ -20100,7 +20103,7 @@ RECOMP_FUNC void func_0022C554(uint8_t* rdram, recomp_context* ctx) {
     // 0x0022C5E0: jal         0x0029ACA0
     // 0x0022C5E4: addu        $a0, $s0, $zero
     ctx->r4 = ADD32(ctx->r16, 0);
-    func_0029ACA0(rdram, ctx);
+    osContInit_recomp(rdram, ctx);
         goto after_4;
     // 0x0022C5E4: addu        $a0, $s0, $zero
     ctx->r4 = ADD32(ctx->r16, 0);
@@ -20112,7 +20115,7 @@ RECOMP_FUNC void func_0022C554(uint8_t* rdram, recomp_context* ctx) {
     // 0x0022C5F0: jal         0x0029DA10
     // 0x0022C5F4: addu        $a2, $a1, $zero
     ctx->r6 = ADD32(ctx->r5, 0);
-    func_0029DA10(rdram, ctx);
+    osSendMesg_recomp(rdram, ctx);
         goto after_5;
     // 0x0022C5F4: addu        $a2, $a1, $zero
     ctx->r6 = ADD32(ctx->r5, 0);
@@ -20264,7 +20267,7 @@ RECOMP_FUNC void func_0022C6A4(uint8_t* rdram, recomp_context* ctx) {
     // 0x0022C6DC: jal         0x0029D8E8
     // 0x0022C6E0: addu        $a2, $a1, $zero
     ctx->r6 = ADD32(ctx->r5, 0);
-    func_0029D8E8(rdram, ctx);
+    osRecvMesg_recomp(rdram, ctx);
         goto after_1;
     // 0x0022C6E0: addu        $a2, $a1, $zero
     ctx->r6 = ADD32(ctx->r5, 0);
@@ -20368,7 +20371,7 @@ L_0022C73C:
     // 0x0022C75C: jal         0x0029A8D8
     // 0x0022C760: nop
 
-    func_0029A8D8(rdram, ctx);
+    osContStartQuery_recomp(rdram, ctx);
         goto after_4;
     // 0x0022C760: nop
 
@@ -20392,7 +20395,7 @@ L_0022C774:
     // 0x0022C77C: jal         0x0029A980
     // 0x0022C780: nop
 
-    func_0029A980(rdram, ctx);
+    osContStartReadData_recomp(rdram, ctx);
         goto after_5;
     // 0x0022C780: nop
 
@@ -20407,7 +20410,7 @@ L_0022C784:
     // 0x0022C790: jal         0x0029DA10
     // 0x0022C794: addu        $a2, $a1, $zero
     ctx->r6 = ADD32(ctx->r5, 0);
-    func_0029DA10(rdram, ctx);
+    osSendMesg_recomp(rdram, ctx);
         goto after_6;
     // 0x0022C794: addu        $a2, $a1, $zero
     ctx->r6 = ADD32(ctx->r5, 0);
@@ -21510,7 +21513,7 @@ L_0022CD50:
     // 0x0022CD74: jal         0x0029D8E8
     // 0x0022CD78: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
-    func_0029D8E8(rdram, ctx);
+    osRecvMesg_recomp(rdram, ctx);
         goto after_0;
     // 0x0022CD78: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
@@ -21613,7 +21616,7 @@ L_0022CDEC:
     // 0x0022CE00: jal         0x0029DA10
     // 0x0022CE04: addu        $a2, $a1, $zero
     ctx->r6 = ADD32(ctx->r5, 0);
-    func_0029DA10(rdram, ctx);
+    osSendMesg_recomp(rdram, ctx);
         goto after_7;
     // 0x0022CE04: addu        $a2, $a1, $zero
     ctx->r6 = ADD32(ctx->r5, 0);
@@ -21958,7 +21961,7 @@ RECOMP_FUNC void func_0022CFAC(uint8_t* rdram, recomp_context* ctx) {
     // 0x0022CFC0: jal         0x0029D8E8
     // 0x0022CFC4: addu        $a1, $zero, $zero
     ctx->r5 = ADD32(0, 0);
-    func_0029D8E8(rdram, ctx);
+    osRecvMesg_recomp(rdram, ctx);
         goto after_0;
     // 0x0022CFC4: addu        $a1, $zero, $zero
     ctx->r5 = ADD32(0, 0);
@@ -21990,7 +21993,7 @@ RECOMP_FUNC void func_0022CFD8(uint8_t* rdram, recomp_context* ctx) {
     // 0x0022CFEC: jal         0x0029DA10
     // 0x0022CFF0: addu        $a2, $a1, $zero
     ctx->r6 = ADD32(ctx->r5, 0);
-    func_0029DA10(rdram, ctx);
+    osSendMesg_recomp(rdram, ctx);
         goto after_0;
     // 0x0022CFF0: addu        $a2, $a1, $zero
     ctx->r6 = ADD32(ctx->r5, 0);
@@ -22573,7 +22576,7 @@ RECOMP_FUNC void func_0022D2E4(uint8_t* rdram, recomp_context* ctx) {
     // 0x0022D320: jal         0x0029D8E8
     // 0x0022D324: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
-    func_0029D8E8(rdram, ctx);
+    osRecvMesg_recomp(rdram, ctx);
         goto after_0;
     // 0x0022D324: addiu       $a2, $zero, 0x1
     ctx->r6 = ADD32(0, 0X1);
@@ -22678,7 +22681,7 @@ L_0022D39C:
     // 0x0022D3B0: jal         0x0029DA10
     // 0x0022D3B4: addu        $a2, $a1, $zero
     ctx->r6 = ADD32(ctx->r5, 0);
-    func_0029DA10(rdram, ctx);
+    osSendMesg_recomp(rdram, ctx);
         goto after_7;
     // 0x0022D3B4: addu        $a2, $a1, $zero
     ctx->r6 = ADD32(ctx->r5, 0);
