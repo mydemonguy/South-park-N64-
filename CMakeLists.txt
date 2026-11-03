@@ -124,8 +124,13 @@ endif()
 # made with `git diff` inside lib/<submodule>). Each is applied only if not already applied,
 # so reconfiguring is safe; a patch that no longer fits stops the build.
 find_package(Git REQUIRED)
+# apply_local_patches(<path under lib/> [<folder under tools/patches/>, default: same as path])
 function(apply_local_patches submodule)
-    file(GLOB local_patches ${CMAKE_SOURCE_DIR}/tools/patches/${submodule}/*.patch)
+    set(patch_dir ${submodule})
+    if(ARGC GREATER 1)
+        set(patch_dir ${ARGV1})
+    endif()
+    file(GLOB local_patches ${CMAKE_SOURCE_DIR}/tools/patches/${patch_dir}/*.patch)
     list(SORT local_patches)
     foreach(local_patch ${local_patches})
         execute_process(COMMAND ${GIT_EXECUTABLE} apply --reverse --check ${local_patch}
@@ -143,6 +148,7 @@ function(apply_local_patches submodule)
     endforeach()
 endfunction()
 apply_local_patches(rt64)
+apply_local_patches(rt64/src/contrib/plume plume)   # rt64's graphics layer, its own nested submodule
 apply_local_patches(N64ModernRuntime)
 
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/rt64 ${CMAKE_BINARY_DIR}/rt64)

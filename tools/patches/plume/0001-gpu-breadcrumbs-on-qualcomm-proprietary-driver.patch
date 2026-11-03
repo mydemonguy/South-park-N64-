@@ -1,0 +1,225 @@
+diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
+index 3ee06a8..7486431 100644
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -11,8 +11,11 @@
+ #include "plume_vulkan.h"
+ 
+ #include <algorithm>
++#include <atomic>
+ #include <cmath>
+ #include <climits>
++#include <mutex>
++#include <string>
+ #include <unordered_map>
+ 
+ #if DLSS_ENABLED
+@@ -1415,6 +1418,7 @@ namespace plume {
+     }
+ 
+     void VulkanComputePipeline::setName(const std::string &name) {
++        debugName = name;
+         setObjectName(device->vk, VK_OBJECT_TYPE_PIPELINE, uint64_t(vk), name);
+     }
+ 
+@@ -1678,6 +1682,7 @@ namespace plume {
+     }
+ 
+     void VulkanGraphicsPipeline::setName(const std::string &name) {
++        debugName = name;
+         setObjectName(device->vk, VK_OBJECT_TYPE_PIPELINE, uint64_t(vk), name);
+     }
+ 
+@@ -2973,6 +2978,86 @@ namespace plume {
+         }
+     }
+ 
++    // GPU breadcrumbs (South Park 64 diagnostics for Qualcomm's proprietary driver, which
++    // loses the device on the first game frames). Before each dispatch, render pass and the
++    // end of each command list, the GPU waits for all earlier work and writes the step's
++    // number into host-visible memory; when the device is lost, the number left there names
++    // the step that was running. Only on that driver, and only for the first steps.
++    namespace {
++        constexpr uint32_t CrumbLabelCount = 2048;
++        constexpr uint32_t CrumbMaxSteps = 6000;
++        std::atomic<bool> crumbsEnabled{false};
++        std::atomic<bool> crumbsReported{false};
++        std::atomic<uint32_t> crumbNext{1};
++        VkBuffer crumbBuffer = VK_NULL_HANDLE;
++        VmaAllocation crumbAllocation = VK_NULL_HANDLE;
++        volatile uint32_t *crumbMapped = nullptr;
++        std::mutex crumbMutex;
++        std::string crumbLabels[CrumbLabelCount];
++
++        void crumbsReport(const char *where) {
++            if (!crumbsEnabled.load() || crumbsReported.exchange(true)) {
++                return;
++            }
++            const uint32_t last = crumbMapped[0];
++            const uint32_t recorded = crumbNext.load() - 1;
++            std::scoped_lock lock(crumbMutex);
++            fprintf(stderr, "[gpu] DEVICE LOST (seen at %s). Last step the GPU started: #%u of %u recorded\n", where, last, recorded);
++            const uint32_t from = (last > 8) ? last - 8 : 1;
++            for (uint32_t i = from; (i <= last + 3) && (i <= recorded); i++) {
++                fprintf(stderr, "[gpu] %s #%u %s\n", (i == last) ? "->" : "  ", i, crumbLabels[i % CrumbLabelCount].c_str());
++            }
++        }
++    }
++
++    static void crumbsSetup(VulkanDevice *device, const RenderDeviceDescription &description) {
++        const bool qualcommProprietary = (uint32_t(description.vendor) == 0x5143) && (description.name.find("Turnip") == std::string::npos);
++        if (!qualcommProprietary || (crumbBuffer != VK_NULL_HANDLE)) {
++            return;
++        }
++        VkBufferCreateInfo bufferInfo = {};
++        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
++        bufferInfo.size = 256;
++        bufferInfo.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT;
++        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
++        VmaAllocationCreateInfo allocInfo = {};
++        allocInfo.usage = VMA_MEMORY_USAGE_AUTO;
++        allocInfo.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
++        allocInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
++        VmaAllocationInfo info = {};
++        VkResult res = vmaCreateBuffer(device->allocator, &bufferInfo, &allocInfo, &crumbBuffer, &crumbAllocation, &info);
++        if ((res != VK_SUCCESS) || (info.pMappedData == nullptr)) {
++            fprintf(stderr, "[gpu] breadcrumbs unavailable (0x%X)\n", res);
++            crumbBuffer = VK_NULL_HANDLE;
++            return;
++        }
++        crumbMapped = reinterpret_cast<volatile uint32_t *>(info.pMappedData);
++        crumbMapped[0] = 0;
++        crumbsEnabled = true;
++        fprintf(stderr, "[gpu] breadcrumbs on (Qualcomm proprietary driver): the step running when the device is lost will be logged\n");
++    }
++
++    uint32_t VulkanCommandList::breadcrumb(const std::string &label) {
++        if (!crumbsEnabled.load(std::memory_order_relaxed) || (activeRenderPass != VK_NULL_HANDLE) || crumbsReported.load(std::memory_order_relaxed)) {
++            return 0;
++        }
++        const uint32_t id = crumbNext.fetch_add(1);
++        if (id > CrumbMaxSteps) {
++            return 0;
++        }
++        {
++            std::scoped_lock lock(crumbMutex);
++            crumbLabels[id % CrumbLabelCount] = label;
++        }
++        VkMemoryBarrier barrier = {};
++        barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
++        barrier.srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT;
++        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
++        vkCmdPipelineBarrier(vk, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &barrier, 0, nullptr, 0, nullptr);
++        vkCmdFillBuffer(vk, crumbBuffer, 0, 4, id);
++        return id;
++    }
++
+     void VulkanCommandList::begin() {
+         vkResetCommandBuffer(vk, 0);
+ 
+@@ -2989,6 +3074,7 @@ namespace plume {
+ 
+     void VulkanCommandList::end() {
+         endActiveRenderPass();
++        breadcrumb("end of command list");
+ 
+         VkResult res = vkEndCommandBuffer(vk);
+         if (res != VK_SUCCESS) {
+@@ -3069,6 +3155,10 @@ namespace plume {
+     void VulkanCommandList::dispatch(uint32_t threadGroupCountX, uint32_t threadGroupCountY, uint32_t threadGroupCountZ) {
+         assert(activeComputePipelineLayout != nullptr);
+ 
++        if (crumbsEnabled.load(std::memory_order_relaxed)) {
++            breadcrumb(std::string("dispatch ") + boundComputeName + " (" + std::to_string(threadGroupCountX) + "x" + std::to_string(threadGroupCountY) + "x" + std::to_string(threadGroupCountZ) + ")");
++        }
++
+         vkCmdDispatch(vk, threadGroupCountX, threadGroupCountY, threadGroupCountZ);
+     }
+ 
+@@ -3138,11 +3228,21 @@ namespace plume {
+                 return;
+             }
+             vkCmdBindPipeline(vk, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline->vk);
++            boundComputeName = computePipeline->debugName.empty() ? "(unnamed)" : computePipeline->debugName.c_str();
+             break;
+         }
+         case VulkanPipeline::Type::Graphics: {
+             const VulkanGraphicsPipeline *graphicsPipeline = static_cast<const VulkanGraphicsPipeline *>(interfacePipeline);
+             vkCmdBindPipeline(vk, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline->vk);
++            boundGraphicsName = graphicsPipeline->debugName.empty() ? "(unnamed)" : graphicsPipeline->debugName.c_str();
++            if (crumbsEnabled.load(std::memory_order_relaxed) && (passCrumb != 0) && (activeRenderPass != VK_NULL_HANDLE)) {
++                // Add the pipelines used inside the current render pass to its label (first few).
++                std::scoped_lock lock(crumbMutex);
++                std::string &label = crumbLabels[passCrumb % CrumbLabelCount];
++                if ((label.size() < 240) && (label.find(boundGraphicsName) == std::string::npos)) {
++                    label += std::string(", ") + boundGraphicsName;
++                }
++            }
+             break;
+         }
+         case VulkanPipeline::Type::Raytracing: {
+@@ -3661,6 +3761,10 @@ namespace plume {
+         assert(targetFramebuffer != nullptr);
+         
+         if (activeRenderPass == VK_NULL_HANDLE) {
++            if (crumbsEnabled.load(std::memory_order_relaxed)) {
++                passCrumb = breadcrumb("render pass " + std::to_string(targetFramebuffer->width) + "x" + std::to_string(targetFramebuffer->height) + ": " + boundGraphicsName);
++            }
++
+             VkRenderPassBeginInfo beginInfo = {};
+             beginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+             beginInfo.renderPass = targetFramebuffer->renderPass;
+@@ -3824,6 +3928,9 @@ namespace plume {
+ 
+         if (res != VK_SUCCESS) {
+             fprintf(stderr, "vkQueueSubmit failed with error code 0x%X.\n", res);
++            if (res == VK_ERROR_DEVICE_LOST) {
++                crumbsReport("vkQueueSubmit");
++            }
+             return;
+         }
+     }
+@@ -3835,6 +3942,9 @@ namespace plume {
+         VkResult res = vkWaitForFences(device->vk, 1, &interfaceFence->vk, VK_TRUE, UINT64_MAX);
+         if (res != VK_SUCCESS) {
+             fprintf(stderr, "vkWaitForFences failed with error code 0x%X.\n", res);
++            if (res == VK_ERROR_DEVICE_LOST) {
++                crumbsReport("vkWaitForFences");
++            }
+             return;
+         }
+ 
+@@ -4331,6 +4441,8 @@ namespace plume {
+             return;
+         }
+ 
++        crumbsSetup(this, description);
++
+         // Find the biggest device local memory available on the device.
+         VkDeviceSize memoryHeapSize = 0;
+         const VkPhysicalDeviceMemoryProperties *memoryProps = nullptr;
+diff --git a/plume_vulkan.h b/plume_vulkan.h
+index 050c47a..4833c15 100644
+--- a/plume_vulkan.h
++++ b/plume_vulkan.h
+@@ -167,6 +167,7 @@ namespace plume {
+ 
+         VulkanDevice *device = nullptr;
+         Type type = Type::Unknown;
++        std::string debugName;   // From setName(); used by the GPU breadcrumbs.
+ 
+         VulkanPipeline(VulkanDevice *device, Type type);
+         virtual ~VulkanPipeline() override;
+@@ -312,8 +313,12 @@ namespace plume {
+         const VulkanPipelineLayout *activeGraphicsPipelineLayout = nullptr;
+         const VulkanPipelineLayout *activeRaytracingPipelineLayout = nullptr;
+         VkRenderPass activeRenderPass = VK_NULL_HANDLE;
++        const char *boundComputeName = "";
++        const char *boundGraphicsName = "";
++        uint32_t passCrumb = 0;
+ 
+         VulkanCommandList(VulkanCommandQueue *queue);
++        uint32_t breadcrumb(const std::string &label);
+         ~VulkanCommandList() override;
+         void begin() override;
+         void end() override;

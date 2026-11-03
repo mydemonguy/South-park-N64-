@@ -1,0 +1,107 @@
+diff --git a/src/render/rt64_raster_shader.cpp b/src/render/rt64_raster_shader.cpp
+index d73881a..ecc5f6e 100644
+--- a/src/render/rt64_raster_shader.cpp
++++ b/src/render/rt64_raster_shader.cpp
+@@ -4,6 +4,8 @@
+ 
+ #include "rt64_raster_shader.h"
+ 
++#include <cstdio>
++
+ #include "xxHash/xxh3.h"
+ 
+ #include "shaders/RenderParams.hlsli.rw.h"
+@@ -271,6 +273,11 @@ namespace RT64 {
+ #endif
+         creation.multisampling = multisampling;
+         pipeline = createPipeline(creation);
++        if (pipeline != nullptr) {
++            char name[64];
++            snprintf(name, sizeof(name), "raster specialized %08X:%08X", desc.colorCombiner.H, desc.colorCombiner.L);
++            pipeline->setName(name);
++        }
+     }
+ 
+     RasterShader::~RasterShader() { }
+@@ -602,6 +609,7 @@ namespace RT64 {
+         targetBlend.blendOpAlpha = RenderBlendOperation::ADD;
+ 
+         postBlendDitherNoiseAddPipeline = device->createGraphicsPipeline(postBlendDesc);
++        postBlendDitherNoiseAddPipeline->setName("postBlendDitherNoiseAdd");
+ 
+         postBlendDesc.pixelShader = postBlendSubPixelShader.get();
+         targetBlend.blendOp = RenderBlendOperation::REV_SUBTRACT;
+@@ -632,11 +640,13 @@ namespace RT64 {
+             if (pipelineIndex == 0) {
+                 firstPipelineMutex.lock();
+                 pipelines[pipelineIndex] = RasterShader::createPipeline(creation);
++                if (pipelines[pipelineIndex] != nullptr) { pipelines[pipelineIndex]->setName("raster ubershader"); }
+                 firstPipelineMutex.unlock();
+                 firstPipelineCondition.notify_all();
+             }
+             else {
+                 pipelines[pipelineIndex] = RasterShader::createPipeline(creation);
++                if (pipelines[pipelineIndex] != nullptr) { pipelines[pipelineIndex]->setName("raster ubershader"); }
+             }
+         }
+     }
+diff --git a/src/render/rt64_shader_library.cpp b/src/render/rt64_shader_library.cpp
+index 4973699..55354a3 100644
+--- a/src/render/rt64_shader_library.cpp
++++ b/src/render/rt64_shader_library.cpp
+@@ -620,6 +620,33 @@ namespace RT64 {
+             pipelineDesc.pipelineLayout = videoInterfacePixel.pipelineLayout.get();
+             videoInterfacePixel.pipeline = device->createGraphicsPipeline(pipelineDesc);
+         }
++
++        // Names for GPU diagnostics (breadcrumbs on a lost device).
++        if (bicubicScaling.pipeline != nullptr) { bicubicScaling.pipeline->setName("bicubicScaling"); }
++        if (boxFilter.pipeline != nullptr) { boxFilter.pipeline->setName("boxFilter"); }
++        if (compose.pipeline != nullptr) { compose.pipeline->setName("compose"); }
++        if (idle.pipeline != nullptr) { idle.pipeline->setName("idle"); }
++        if (fbChangesClear.pipeline != nullptr) { fbChangesClear.pipeline->setName("fbChangesClear"); }
++        if (fbReadAnyChanges.pipeline != nullptr) { fbReadAnyChanges.pipeline->setName("fbReadAnyChanges"); }
++        if (fbReadAnyFull.pipeline != nullptr) { fbReadAnyFull.pipeline->setName("fbReadAnyFull"); }
++        if (fbReinterpret.pipeline != nullptr) { fbReinterpret.pipeline->setName("fbReinterpret"); }
++        if (fbWriteColor.pipeline != nullptr) { fbWriteColor.pipeline->setName("fbWriteColor"); }
++        if (fbWriteDepth.pipeline != nullptr) { fbWriteDepth.pipeline->setName("fbWriteDepth"); }
++        if (fbWriteDepthMS.pipeline != nullptr) { fbWriteDepthMS.pipeline->setName("fbWriteDepthMS"); }
++        if (gaussianFilterRGB3x3.pipeline != nullptr) { gaussianFilterRGB3x3.pipeline->setName("gaussianFilterRGB3x3"); }
++        if (histogramAverage.pipeline != nullptr) { histogramAverage.pipeline->setName("histogramAverage"); }
++        if (histogramClear.pipeline != nullptr) { histogramClear.pipeline->setName("histogramClear"); }
++        if (histogramSet.pipeline != nullptr) { histogramSet.pipeline->setName("histogramSet"); }
++        if (luminanceHistogram.pipeline != nullptr) { luminanceHistogram.pipeline->setName("luminanceHistogram"); }
++        if (rspModify.pipeline != nullptr) { rspModify.pipeline->setName("rspModify"); }
++        if (rspProcess.pipeline != nullptr) { rspProcess.pipeline->setName("rspProcess"); }
++        if (rspSmoothNormal.pipeline != nullptr) { rspSmoothNormal.pipeline->setName("rspSmoothNormal"); }
++        if (rspWorld.pipeline != nullptr) { rspWorld.pipeline->setName("rspWorld"); }
++        if (textureCopy.pipeline != nullptr) { textureCopy.pipeline->setName("textureCopy"); }
++        if (textureDecode.pipeline != nullptr) { textureDecode.pipeline->setName("textureDecode"); }
++        if (videoInterfaceNearest.pipeline != nullptr) { videoInterfaceNearest.pipeline->setName("videoInterfaceNearest"); }
++        if (videoInterfaceLinear.pipeline != nullptr) { videoInterfaceLinear.pipeline->setName("videoInterfaceLinear"); }
++        if (videoInterfacePixel.pipeline != nullptr) { videoInterfacePixel.pipeline->setName("videoInterfacePixel"); }
+     }
+ 
+     void ShaderLibrary::setupMultisamplingShaders(RenderInterface *rhi, RenderDevice *device, const RenderMultisampling &multisampling) {
+@@ -916,5 +943,21 @@ namespace RT64 {
+             pipelineDesc.pixelShader = pixelShader.get();
+             textureResolve.pipeline = device->createGraphicsPipeline(pipelineDesc);
+         }
++
++        // Names for GPU diagnostics (breadcrumbs on a lost device).
++        if (fbChangesDrawColor.pipeline != nullptr) { fbChangesDrawColor.pipeline->setName("fbChangesDrawColor"); }
++        if (fbChangesDrawDepth.pipeline != nullptr) { fbChangesDrawDepth.pipeline->setName("fbChangesDrawDepth"); }
++        if (rtCopyDepthToColor.pipeline != nullptr) { rtCopyDepthToColor.pipeline->setName("rtCopyDepthToColor"); }
++        if (rtCopyDepthToColorMS.pipeline != nullptr) { rtCopyDepthToColorMS.pipeline->setName("rtCopyDepthToColorMS"); }
++        if (rtCopyColorToDepth.pipeline != nullptr) { rtCopyColorToDepth.pipeline->setName("rtCopyColorToDepth"); }
++        if (rtCopyColorToDepthMS.pipeline != nullptr) { rtCopyColorToDepthMS.pipeline->setName("rtCopyColorToDepthMS"); }
++        if (postProcess.pipeline != nullptr) { postProcess.pipeline->setName("postProcess"); }
++        if (debug.pipeline != nullptr) { debug.pipeline->setName("debug"); }
++        if (rspVertexTestZ.pipeline != nullptr) { rspVertexTestZ.pipeline->setName("rspVertexTestZ"); }
++        if (rspVertexTestZMS.pipeline != nullptr) { rspVertexTestZMS.pipeline->setName("rspVertexTestZMS"); }
++        if (textureResolve.pipeline != nullptr) { textureResolve.pipeline->setName("textureResolve"); }
++        if (im3dLine.pipeline != nullptr) { im3dLine.pipeline->setName("im3dLine"); }
++        if (im3dPoint.pipeline != nullptr) { im3dPoint.pipeline->setName("im3dPoint"); }
++        if (im3dTriangle.pipeline != nullptr) { im3dTriangle.pipeline->setName("im3dTriangle"); }
+     }
+ };
