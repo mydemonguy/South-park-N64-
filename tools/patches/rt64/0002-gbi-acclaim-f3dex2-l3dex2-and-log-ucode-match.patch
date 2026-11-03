@@ -1,0 +1,43 @@
+diff --git a/src/gbi/rt64_gbi.cpp b/src/gbi/rt64_gbi.cpp
+index 7006549..3123fb2 100644
+--- a/src/gbi/rt64_gbi.cpp
++++ b/src/gbi/rt64_gbi.cpp
+@@ -118,7 +118,10 @@ namespace RT64 {
+     const GBIInstance   F3DEX2_NON_FIFO_2_03      = { "F3DEX2.NoN.fifo 2.03",                      GBIUCode::F3DEX2,      { false,  true,   false,  false,  false } }; // Needs confirmation.
+     const GBIInstance   F3DEX2_NON_FIFO_2_04      = { "F3DEX2.NoN.fifo 2.04",                      GBIUCode::F3DEX2,      { false,  true,   false,  false,  false } }; // Needs confirmation.
+     const GBIInstance   F3DEX2_NON_FIFO_2_05      = { "F3DEX2.NoN.fifo 2.05",                      GBIUCode::F3DEX2,      { false,  true,   false,  false,  false } };
+-    const GBIInstance   F3DEX2_NON_FIFO_ACCLAIM   = { "F3DEX2.NoN.fifo 2.05 (Acclaim)",            GBIUCode::Unknown,     { false,  true,   false,  false,  false } }; // Needs confirmation.
++    // Was GBIUCode::Unknown, which sets up only the raw RDP commands: South Park 64's F3DEX2
++    // display lists were then decoded as RDP commands (nonsense loads, lost GPU device).
++    // Treated like F3DEX2.NoN.fifo 2.05 until a difference shows up.
++    const GBIInstance   F3DEX2_NON_FIFO_ACCLAIM   = { "F3DEX2.NoN.fifo 2.05 (Acclaim)",            GBIUCode::F3DEX2,      { false,  true,   false,  false,  false } }; // Needs confirmation.
+     const GBIInstance   F3DEX2_NON_FIFO_2_06      = { "F3DEX2.NoN.fifo 2.06",                      GBIUCode::F3DEX2,      { false,  true,   false,  false,  false } }; // Needs confirmation.
+     const GBIInstance   F3DEX2_NON_FIFO_2_07      = { "F3DEX2.NoN.fifo 2.07",                      GBIUCode::F3DEX2,      { false,  true,   false,  false,  false } }; // Needs confirmation.
+     const GBIInstance   F3DEX2_NON_FIFO_2_08      = { "F3DEX2.NoN.fifo 2.08",                      GBIUCode::F3DEX2,      { false,  true,   false,  false,  false } };
+@@ -150,7 +153,8 @@ namespace RT64 {
+     const GBIInstance   L3DEX_1_23                = { "L3DEX 1.23",                                GBIUCode::Unknown,     { false,  false,  false,  false,  false } }; // Needs confirmation.
+     const GBIInstance   L3DEX_1_23_A              = { "L3DEX 1.23 (Variant)",                      GBIUCode::Unknown,     { false,  false,  false,  false,  false } }; // Needs confirmation.
+     const GBIInstance   L3DEX2_FIFO_2_05          = { "L3DEX2.fifo 2.05",                          GBIUCode::L3DEX2,      { false,  false,  false,  false,  false } }; // Needs confirmation.
+-    const GBIInstance   L3DEX2_FIFO_ACCLAIM       = { "L3DEX2.fifo 2.05 (Acclaim)",                GBIUCode::Unknown,     { false,  false,  false,  false,  false } }; // Needs confirmation.
++    // Same as above, treated like L3DEX2.fifo 2.05.
++    const GBIInstance   L3DEX2_FIFO_ACCLAIM       = { "L3DEX2.fifo 2.05 (Acclaim)",                GBIUCode::L3DEX2,      { false,  false,  false,  false,  false } }; // Needs confirmation.
+     const GBIInstance   L3DEX2_FIFO_2_08          = { "L3DEX2.fifo 2.08",                          GBIUCode::L3DEX2,      { false,  false,  false,  false,  false } }; // Needs confirmation.
+     const GBIInstance   ZSORTP_0_33               = { "ZSortp 0.33",                               GBIUCode::Unknown,     { false,  false,  false,  false,  false } }; // Needs confirmation.
+     
+@@ -459,6 +463,16 @@ namespace RT64 {
+             return nullptr;
+         }
+ 
++        // Which microcode a game's tasks were matched to (South Park 64 diagnostics: a wrong
++        // match decodes a valid display list as nonsense).
++        static int reportedMatches = 0;
++        if (reportedMatches < 16) {
++            reportedMatches++;
++            fprintf(stderr, "[rt64] ucode text=0x%06X data=0x%06X matched \"%s\" (GBIUCode %d)%s\n",
++                textAddress, dataAddress, matchingInstance->name, int(matchingInstance->ucode),
++                (matchingInstance->ucode == GBIUCode::Unknown) ? " -- UNSUPPORTED: only raw RDP commands will be decoded" : "");
++        }
++
+         GBI &gbi = gbiCache[uint32_t(matchingInstance->ucode)];
+         if (gbi.ucode == GBIUCode::Unknown) {
+             gbi.ucode = matchingInstance->ucode;
