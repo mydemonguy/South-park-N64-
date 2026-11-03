@@ -1,6 +1,7 @@
 #include <atomic>
 #include <cstdio>
 #include <memory>
+#include <string>
 #include <cstring>
 #include <variant>
 #include <algorithm>
@@ -258,6 +259,25 @@ void set_application_user_config(RT64::Application* application, const ultramode
     // Set here rather than only at startup so the toggle applies without a restart
     // -- update_config() routes every later change through this same function.
     RT64::SetFramebufferSyncEnabled(config.fbe_option != ultramodern::renderer::FramebufferEffects::Off);
+
+    // The settings that multiply GPU work, logged when they change (a slow-game report is
+    // otherwise unreadable without them).
+    {
+        static const char* const msaa_names[] = { "none", "2x", "4x", "8x" };
+        static const char* const rr_names[] = { "Original", "Display (interpolated)", "Manual" };
+        const int msaa = int(config.msaa_option), rr = int(config.rr_option);
+        char line[200];
+        std::snprintf(line, sizeof(line), "[perf] settings: resolution %.0fx (downsample %dx), MSAA %s, framerate %s%s, framebuffer effects %s\n",
+            double(application->userConfig.resolutionMultiplier), int(application->userConfig.downsampleMultiplier),
+            (msaa >= 0 && msaa < 4) ? msaa_names[msaa] : "?", (rr >= 0 && rr < 3) ? rr_names[rr] : "?",
+            (config.rr_option == ultramodern::renderer::RefreshRate::Manual) ? (" " + std::to_string(config.rr_manual_value)).c_str() : "",
+            (config.fbe_option == ultramodern::renderer::FramebufferEffects::Off) ? "off" : "on");
+        static std::string last;
+        if (last != line) {
+            last = line;
+            std::fputs(line, stderr);
+        }
+    }
 }
 
 ultramodern::renderer::SetupResult map_setup_result(RT64::Application::SetupResult rt64_result) {
