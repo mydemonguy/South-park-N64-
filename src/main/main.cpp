@@ -683,6 +683,12 @@ static void android_redirect_stdio_to_logcat() {
         char buf[512];
         ssize_t n;
         std::string line;
+        // An error repeated every frame (e.g. vkQueueSubmit after a lost GPU device)
+        // otherwise floods the session log until the lines that explain it are lost.
+        // Each distinct line goes to the session log the first 10 times, then only at
+        // the 100th, 1000th, ... occurrence with its count; logcat still gets all of
+        // them. [status] lines repeat by design and are always kept.
+        std::unordered_map<std::string, uint64_t> seen;
         while ((n = read(g_stdio_pipe[0], buf, sizeof(buf) - 1)) > 0) {
             buf[n] = '\0';
             line += buf;
@@ -690,8 +696,24 @@ static void android_redirect_stdio_to_logcat() {
             while ((pos = line.find('\n')) != std::string::npos) {
                 std::string one = line.substr(0, pos);
                 __android_log_write(ANDROID_LOG_INFO, "SouthPark64-stdio", one.c_str());
-                southpark::crashlog::write_line(one);
                 line.erase(0, pos + 1);
+                if (one.rfind("[status]", 0) == 0) {
+                    southpark::crashlog::write_line(one);
+                    continue;
+                }
+                uint64_t count = (seen.size() < 4096 || seen.count(one)) ? ++seen[one] : 1;
+                if (count <= 10) {
+                    southpark::crashlog::write_line(one);
+                    if (count == 10) {
+                        southpark::crashlog::write_line("[log] (the line above repeats; further copies shown at 100, 1000, ...)");
+                    }
+                } else {
+                    uint64_t p = 100;
+                    while (p < count && p <= UINT64_MAX / 10) p *= 10;
+                    if (p == count) {
+                        southpark::crashlog::write_line(one + "  [x" + std::to_string(count) + "]");
+                    }
+                }
             }
         }
     }).detach();
