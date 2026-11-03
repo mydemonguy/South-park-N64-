@@ -23,7 +23,7 @@ index 1d41696..e7a1962 100644
 +                static int reports = 0;
 +                const uint32_t address = present.screenVI.fbAddress();
 +                const bool found = (viFb != nullptr);
-+                if (((address != lastAddress) || (found != lastFound)) && (reports < 24)) {
++                if (((address != lastAddress) || (found != lastFound)) && (reports < 6)) {
 +                    reports++;
 +                    const hlslpp::uint2 size = present.screenVI.fbSize();
 +                    fprintf(stderr, "[rt64] present: origin=0x%06X fb=0x%06X %ux%u siz=%u -> %s\n",

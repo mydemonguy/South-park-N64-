@@ -479,7 +479,7 @@ extern "C" void sp_osPiRawStartDma(uint8_t* rdram, recomp_context* ctx) {
     uint32_t size = (uint32_t)ctx->r7;
 
     uint32_t nth = dma_count.fetch_add(1);
-    if (nth < 48 || (nth % 500) == 0) {
+    if (nth < 8 || (nth % 500) == 0) {
         std::fprintf(stderr, "[southpark] PI DMA #%u dir=%u rom=0x%08X -> 0x%08X size=0x%X\n",
                      nth, direction, phys, (uint32_t)dram, size);
     }

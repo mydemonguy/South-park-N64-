@@ -88,7 +88,7 @@ public class LauncherActivity extends AppCompatActivity {
             if (marker.exists()) {
                 //noinspection ResultOfMethodCallIgnored
                 marker.delete();
-                showLastSessionDialog(readTail(new File(lastSessionDir, "session.log"), 24 * 1024));
+                showLastSessionDialog(readHeadAndTail(new File(lastSessionDir, "session.log"), 4 * 1024, 14 * 1024));
                 return;   // continues in continueStartup()
             }
         }
@@ -128,6 +128,31 @@ public class LauncherActivity extends AppCompatActivity {
         }
 
         beginStorageSetup();
+    }
+
+    /**
+     * The start of the log (build, device, driver) and its end (what happened last), with
+     * the middle dropped. Kept under ~19,000 characters in total: logs pasted into a chat
+     * are cut at 20,000, and the end is the part that matters most.
+     */
+    private static String readHeadAndTail(File f, int headBytes, int tailBytes) {
+        if (!f.exists()) {
+            return "(no session.log found)";
+        }
+        long len = f.length();
+        if (len <= headBytes + tailBytes) {
+            return readTail(f, headBytes + tailBytes);
+        }
+        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(f, "r")) {
+            byte[] head = new byte[headBytes];
+            raf.readFully(head);
+            String headText = new String(head, java.nio.charset.StandardCharsets.UTF_8);
+            int cut = headText.lastIndexOf('\n');
+            headText = cut > 0 ? headText.substring(0, cut + 1) : headText;
+            return headText + "\n... (" + (len - headBytes - tailBytes) / 1024 + " KB of log skipped) ...\n" + readTail(f, tailBytes);
+        } catch (IOException e) {
+            return "(could not read session.log: " + e.getMessage() + ")";
+        }
     }
 
     private static String readTail(File f, int maxBytes) {

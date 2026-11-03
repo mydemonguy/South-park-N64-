@@ -74,7 +74,7 @@ index d4d9883..19d5fa1 100644
 +        // South Park 64 diagnostics: the distinct draw states used for lit or fogged geometry
 +        // (the 3D world), to find why the world is tinted while the HUD is not.
 +        if (geometryMode & (G_LIGHTING | G_FOG)) {
-+            static uint64_t seen[40] = {};
++            static uint64_t seen[16] = {};
 +            static int seenCount = 0;
 +            const interop::ColorCombiner &cc = state->rdp->colorCombinerStack[state->rdp->colorCombinerStackSize - 1];
 +            const hlslpp::float4 &fc = state->rdp->fogColorStack[state->rdp->fogColorStackSize - 1];
@@ -88,7 +88,7 @@ index d4d9883..19d5fa1 100644
 +            for (uint64_t p : parts) { key = (key ^ p) * 1099511628211ULL; }
 +            bool known = false;
 +            for (int i = 0; i < seenCount; i++) { known |= (seen[i] == key); }
-+            if (!known && (seenCount < 40)) {
++            if (!known && (seenCount < 16)) {
 +                seen[seenCount++] = key;
 +                fprintf(stderr, "[rt64] 3D state #%d: geom=%08X lights=%d ambient=%06X othermode=%08X:%08X combine=%08X:%08X fogcolor=%08X fog=%d,%d\n",
 +                    seenCount, geometryMode, lightCount, (geometryMode & G_LIGHTING) ? ambientColor : 0U, state->rdp->otherMode.H, state->rdp->otherMode.L,

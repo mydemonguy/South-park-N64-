@@ -7,6 +7,7 @@
 //
 // Lines go to stderr, which main.cpp forwards to the session log. At 2 s and 5 s, every
 // 5 s to the first minute, then every 30 s; plus a snapshot on quit and backgrounding.
+// Thread lines are added to the first report, snapshots, and reports where graphics stalled.
 
 #include <atomic>
 #include <chrono>
@@ -49,7 +50,7 @@ namespace southpark::status {
             }
         }
 
-        void report(uint8_t* rdram, long seconds) {
+        void report(uint8_t* rdram, long seconds, bool with_threads) {
             const uint64_t frames = audio_frames.load();
             std::fprintf(stderr, "[status] %lds gfx=%u audio=%u (%llu Hz avg) screen=%u dma=%u vm_pages=%u\n",
                          seconds, gfx_tasks.load(), audio_buffers.load(),
@@ -61,6 +62,9 @@ namespace southpark::status {
             {
                 std::lock_guard lock{ threads_mutex };
                 snapshot = threads;
+            }
+            if (!with_threads) {
+                return;
             }
             for (const OSThread* t : snapshot) {
                 std::string name = goemon64::get_game_thread_name(t);
@@ -112,7 +116,7 @@ namespace southpark::status {
             return;
         }
         std::fprintf(stderr, "[status] snapshot: %s\n", why);
-        report(rdram, (long)std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - start_time).count());
+        report(rdram, (long)std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - start_time).count(), true);
     }
 
     // Call once from the game's entry point.
@@ -130,7 +134,12 @@ namespace southpark::status {
                 const long s = (long)duration_cast<seconds>(steady_clock::now() - t0).count();
                 if (s < next) continue;
                 if (exited.load()) break;
-                report(rdram, s);
+                // Thread lines only on the first report and when graphics stopped advancing
+                // (the case they help with); otherwise they crowd the log out.
+                static uint32_t last_gfx = UINT32_MAX;
+                const uint32_t gfx = gfx_tasks.load();
+                report(rdram, s, last_gfx == UINT32_MAX || gfx == last_gfx);
+                last_gfx = gfx;
                 next = s < 5 ? 5 : s < 60 ? s + 5 : s + 30;
             }
         }).detach();
