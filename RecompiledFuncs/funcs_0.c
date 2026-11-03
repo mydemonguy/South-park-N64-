@@ -20227,7 +20227,7 @@ RECOMP_FUNC void func_00207044(uint8_t* rdram, recomp_context* ctx) {
     // 0x002070D8: jal         0x0029CE68
     // 0x002070DC: nop
 
-    osViSwapBuffer_recomp(rdram, ctx);
+    sp_osViSwapBuffer(rdram, ctx);
         goto after_8;
     // 0x002070DC: nop
 

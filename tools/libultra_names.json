@@ -170,7 +170,7 @@
       "sig"
     ],
     "0029CE68": [
-      "osViSwapBuffer",
+      "sp_osViSwapBuffer",
       "sig"
     ],
     "0029CEB0": [
@@ -262,7 +262,7 @@
       "sig"
     ],
     "0029E150": [
-      "osVirtualToPhysical",
+      "sp_osVirtualToPhysical",
       "sig (reloc target)"
     ],
     "0029E1B0": [

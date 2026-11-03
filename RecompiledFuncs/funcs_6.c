@@ -40244,7 +40244,7 @@ L_00257F78:
     // 0x00257FC8: jal         0x0029CE68
     // 0x00257FCC: addu        $v0, $a0, $zero
     ctx->r2 = ADD32(ctx->r4, 0);
-    osViSwapBuffer_recomp(rdram, ctx);
+    sp_osViSwapBuffer(rdram, ctx);
         goto after_3;
     // 0x00257FCC: addu        $v0, $a0, $zero
     ctx->r2 = ADD32(ctx->r4, 0);
@@ -41749,7 +41749,7 @@ L_00258788:
     // 0x00258808: jal         0x0029CE68
     // 0x0025880C: addu        $v0, $a0, $zero
     ctx->r2 = ADD32(ctx->r4, 0);
-    osViSwapBuffer_recomp(rdram, ctx);
+    sp_osViSwapBuffer(rdram, ctx);
         goto after_5;
     // 0x0025880C: addu        $v0, $a0, $zero
     ctx->r2 = ADD32(ctx->r4, 0);
@@ -43097,7 +43097,7 @@ RECOMP_FUNC void func_00258EEC(uint8_t* rdram, recomp_context* ctx) {
     // 0x00258F28: jal         0x0029CE68
     // 0x00258F2C: nop
 
-    osViSwapBuffer_recomp(rdram, ctx);
+    sp_osViSwapBuffer(rdram, ctx);
         goto after_0;
     // 0x00258F2C: nop
 

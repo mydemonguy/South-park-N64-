@@ -17,6 +17,8 @@
 //                           to page them in (its handler is func_002903DC). There are no
 //                           CPU exceptions under the recompiler, so the host SIGSEGV
 //                           handler pages them in instead (southpark_tlb_handle_fault).
+//   * sp_osVirtualToPhysical, task pointers - translate TLB-mapped addresses through the
+//                           game's TLB mappings before they reach the RSP/RDP.
 //   * sp_osSetThreadPri   - the runtime's thread_queue_remove only ever checks the head
 //                           of a queue, so changing the priority of another thread that
 //                           is queued behind others corrupts the queue (see below).
@@ -105,6 +107,10 @@ namespace {
     // ---- TLB emulation ----
     struct TlbEntry { bool used; uint64_t host_off; size_t size; };
     TlbEntry tlb_pages[64]{};   // two pages (even/odd) per TLB index
+    // What the game mapped (for address translation), kept even when a host mapping
+    // had to be skipped.
+    struct TlbLogical { bool valid; uint32_t vaddr; uint32_t paddr; uint32_t size; };
+    TlbLogical tlb_logical[64]{};
     int rdram_fd = -1;
     uint8_t* tlb_rdram = nullptr;
     std::mutex tlb_mutex;
@@ -235,6 +241,7 @@ extern "C" bool southpark_init_tlb_memory(uint8_t* rdram) {
 }
 
 static void tlb_unmap_slot(int slot) {
+    tlb_logical[slot] = {};
 #if !defined(_WIN32)
     TlbEntry& e = tlb_pages[slot];
     if (!e.used) {
@@ -251,6 +258,9 @@ static void tlb_unmap_slot(int slot) {
 static void tlb_map_page(int slot, uint32_t vaddr, uint32_t paddr, size_t size) {
 #if !defined(_WIN32)
     tlb_unmap_slot(slot);
+    if (paddr != 0xFFFFFFFFu && vaddr < 0x80000000u) {
+        tlb_logical[slot] = { true, vaddr, paddr, (uint32_t)size };
+    }
     if (paddr == 0xFFFFFFFFu || rdram_fd < 0) {
         return;
     }
@@ -278,6 +288,51 @@ static void tlb_map_page(int slot, uint32_t vaddr, uint32_t paddr, size_t size) 
 #else
     (void)slot; (void)vaddr; (void)paddr; (void)size;
 #endif
+}
+
+// Physical address for a virtual one: KSEG0/KSEG1 directly, KUSEG through the game's
+// TLB mappings. Returns false if no mapping covers it (a demand-paged VM region, or
+// unmapped), as the hardware TLB probe would.
+static bool virtual_to_physical(uint32_t vaddr, uint32_t* paddr) {
+    if (vaddr >= 0x80000000u && vaddr < 0xC0000000u) {
+        *paddr = vaddr & 0x1FFFFFFFu;
+        return true;
+    }
+    std::lock_guard lock{ tlb_mutex };
+    for (const TlbLogical& e : tlb_logical) {
+        if (e.valid && vaddr >= e.vaddr && vaddr - e.vaddr < e.size) {
+            *paddr = e.paddr + (vaddr - e.vaddr);
+            return true;
+        }
+    }
+    return false;
+}
+
+// osVirtualToPhysical(void* vaddr): the runtime's version leaves TLB-mapped addresses
+// unchanged ("TODO handle TLB mappings"), but this game's code and data live at
+// 0x00200000 + phys and 0x00400000 -> 0x00780000, so a pointer it hands to the RSP/RDP
+// came out as the wrong physical address. Translate through the game's TLB instead;
+// an address no mapping covers gives -1, like the hardware TLB probe.
+extern "C" void sp_osVirtualToPhysical(uint8_t* rdram, recomp_context* ctx) {
+    (void)rdram;
+    const uint32_t vaddr = (uint32_t)ctx->r4;
+    uint32_t paddr = 0;
+    if (!virtual_to_physical(vaddr, &paddr)) {
+        static std::atomic<uint32_t> misses{0};
+        const uint32_t n = misses.fetch_add(1);
+        if (n < 16 || (n % 1000) == 0) {
+            std::fprintf(stderr, "[southpark] osVirtualToPhysical(0x%08X): no TLB mapping, returning -1 (ra=0x%08X, #%u)\n",
+                         vaddr, (uint32_t)ctx->r31, n + 1);
+        }
+        paddr = 0xFFFFFFFFu;
+    } else if (vaddr < 0x80000000u) {
+        static std::atomic<uint32_t> tlb_hits{0};
+        if (tlb_hits.fetch_add(1) < 8) {
+            std::fprintf(stderr, "[southpark] osVirtualToPhysical(0x%08X) -> 0x%08X via TLB (ra=0x%08X)\n",
+                         vaddr, paddr, (uint32_t)ctx->r31);
+        }
+    }
+    ctx->r2 = (gpr)(int32_t)paddr;
 }
 
 // osMapTLB(s32 index, OSPageMask pm, void* vaddr, u32 evenpaddr, u32 oddpaddr, s32 asid)
@@ -611,7 +666,75 @@ extern "C" int southpark_sched_guard(uint8_t* rdram, recomp_context* ctx, int wh
 
 // Hook at the start of the scheduler's __scExec(sc, sp, dp) (func_00258F40): log the first
 // task starts, flagging any that would replace an RSP/RDP task still marked as running.
+// osViSwapBuffer(void* framebuffer): the runtime converts the pointer with its own
+// TLB-unaware osVirtualToPhysical, so translate a TLB-mapped framebuffer first.
+extern "C" void osViSwapBuffer_recomp(uint8_t* rdram, recomp_context* ctx);
+extern "C" void sp_osViSwapBuffer(uint8_t* rdram, recomp_context* ctx) {
+    const uint32_t fb = (uint32_t)ctx->r4;
+    uint32_t p = 0;
+    static std::atomic<uint32_t> logged{0};
+    const bool translated = fb < 0x80000000u && virtual_to_physical(fb, &p);
+    if (translated) {
+        ctx->r4 = (gpr)(int32_t)(p | 0x80000000u);
+    }
+    if (logged.fetch_add(1) < 4) {
+        std::fprintf(stderr, "[southpark] osViSwapBuffer(0x%08X)%s\n", fb,
+                     fb >= 0x80000000u ? "" : translated ? " -> TLB translated" : " (KUSEG, no TLB mapping)");
+    }
+    osViSwapBuffer_recomp(rdram, ctx);
+}
+
+// OSTask pointer fields, as offsets into OSTask (OSScTask + 0x10).
+static constexpr uint32_t task_ptr_fields[] = { 0x08 /* ucode_boot */, 0x10 /* ucode */, 0x18 /* ucode_data */,
+    0x20 /* dram_stack */, 0x28 /* output_buff */, 0x2C /* output_buff_size (a pointer) */,
+    0x30 /* data_ptr */, 0x38 /* yield_data_ptr */ };
+
+// libultra's osSpTaskLoad converts every task pointer with osVirtualToPhysical
+// (_VirtualToPhysicalTask); the runtime's osSpTaskLoad does nothing and later just masks
+// them, which is only right for KSEG0. Convert TLB-mapped (KUSEG) ones here, in place,
+// before __scExec loads the task. The first graphics tasks are logged with their fields
+// and the first words of the display list.
+static void southpark_fix_task(uint8_t* rdram, uint32_t sc_task) {
+    if (sc_task == 0) {
+        return;
+    }
+    const gpr t = (gpr)(int32_t)(sc_task + 0x10);
+    for (uint32_t off : task_ptr_fields) {
+        const uint32_t v = (uint32_t)MEM_W(off, t);
+        uint32_t p = 0;
+        if (v != 0 && v < 0x80000000u) {
+            if (virtual_to_physical(v, &p)) {
+                MEM_W(off, t) = (int32_t)(p | 0x80000000u);   // KSEG0 form, as the runtime expects
+            } else {
+                static std::atomic<uint32_t> misses{0};
+                if (misses.fetch_add(1) < 16) {
+                    std::fprintf(stderr, "[sched] task 0x%08X field +0x%02X = 0x%08X has no TLB mapping\n", sc_task, off, v);
+                }
+            }
+        }
+    }
+    const uint32_t type = (uint32_t)MEM_W(0x0, t);
+    static std::atomic<uint32_t> gfx_logged{0};
+    if (type == 1 && gfx_logged.fetch_add(1) < 3) {
+        std::fprintf(stderr, "[sched] gfx task 0x%08X: ucode=0x%08X ucode_data=0x%08X dram_stack=0x%08X output_buff=0x%08X "
+                     "data_ptr=0x%08X data_size=0x%X yield=0x%08X\n", sc_task,
+                     (uint32_t)MEM_W(0x10, t), (uint32_t)MEM_W(0x18, t), (uint32_t)MEM_W(0x20, t), (uint32_t)MEM_W(0x28, t),
+                     (uint32_t)MEM_W(0x30, t), (uint32_t)MEM_W(0x34, t), (uint32_t)MEM_W(0x38, t));
+        const uint32_t dl = (uint32_t)MEM_W(0x30, t);
+        if (dl >= 0x80000000u && dl < 0x80800000u) {
+            const gpr d = (gpr)(int32_t)dl;
+            std::fprintf(stderr, "[sched]   display list: %08X %08X  %08X %08X  %08X %08X  %08X %08X\n",
+                         (uint32_t)MEM_W(0x00, d), (uint32_t)MEM_W(0x04, d), (uint32_t)MEM_W(0x08, d), (uint32_t)MEM_W(0x0C, d),
+                         (uint32_t)MEM_W(0x10, d), (uint32_t)MEM_W(0x14, d), (uint32_t)MEM_W(0x18, d), (uint32_t)MEM_W(0x1C, d));
+        }
+    }
+}
+
 extern "C" void southpark_sched_trace(uint8_t* rdram, recomp_context* ctx) {
+    southpark_fix_task(rdram, (uint32_t)ctx->r5);
+    if ((uint32_t)ctx->r6 != (uint32_t)ctx->r5) {
+        southpark_fix_task(rdram, (uint32_t)ctx->r6);
+    }
     static std::atomic<uint32_t> calls{0};
     const uint32_t n = calls.fetch_add(1);
     const gpr sc = ctx->r4;

@@ -11377,7 +11377,7 @@ RECOMP_FUNC void func_0026E60C(uint8_t* rdram, recomp_context* ctx) {
     // 0x0026E628: jal         0x0029E150
     // 0x0026E62C: nop
 
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_1;
     // 0x0026E62C: nop
 
@@ -11926,7 +11926,7 @@ L_0026E930:
     // 0x0026E930: jal         0x0029E150
     // 0x0026E934: nop
 
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_4;
     // 0x0026E934: nop
 
@@ -12096,7 +12096,7 @@ L_0026EA08:
     // 0x0026EA20: jal         0x0029E150
     // 0x0026EA24: sw          $v1, 0xC($s1)
     MEM_W(0XC, ctx->r17) = ctx->r3;
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_2;
     // 0x0026EA24: sw          $v1, 0xC($s1)
     MEM_W(0XC, ctx->r17) = ctx->r3;
@@ -12171,7 +12171,7 @@ L_0026EA40:
     // 0x0026EA9C: jal         0x0029E150
     // 0x0026EAA0: addu        $a0, $s1, $zero
     ctx->r4 = ADD32(ctx->r17, 0);
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_4;
     // 0x0026EAA0: addu        $a0, $s1, $zero
     ctx->r4 = ADD32(ctx->r17, 0);

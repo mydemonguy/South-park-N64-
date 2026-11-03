@@ -20,6 +20,8 @@ ignored = [
     "sp_osSetThreadPri",
     "sp_osUnmapTLB",
     "sp_osUnmapTLBAll",
+    "sp_osViSwapBuffer",
+    "sp_osVirtualToPhysical",
 ]
 
 # Unnamed code that uses CP0/TLB/cache instructions and can't be recompiled.

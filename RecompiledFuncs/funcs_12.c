@@ -4850,7 +4850,7 @@ L_0029AFF4:
     // 0x0029B004: jal         0x0029E150
     // 0x0029B008: addu        $a0, $s0, $zero
     ctx->r4 = ADD32(ctx->r16, 0);
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_1;
     // 0x0029B008: addu        $a0, $s0, $zero
     ctx->r4 = ADD32(ctx->r16, 0);
@@ -4864,7 +4864,7 @@ L_0029AFF4:
     // 0x0029B018: jal         0x0029E150
     // 0x0029B01C: nop
 
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_2;
     // 0x0029B01C: nop
 
@@ -8244,7 +8244,7 @@ RECOMP_FUNC void func_0029C378(uint8_t* rdram, recomp_context* ctx) {
     // 0x0029C3AC: jal         0x0029E150
     // 0x0029C3B0: nop
 
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_1;
     // 0x0029C3B0: nop
 
@@ -8265,7 +8265,7 @@ L_0029C3B8:
     // 0x0029C3C4: jal         0x0029E150
     // 0x0029C3C8: nop
 
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_2;
     // 0x0029C3C8: nop
 
@@ -8286,7 +8286,7 @@ L_0029C3D0:
     // 0x0029C3DC: jal         0x0029E150
     // 0x0029C3E0: nop
 
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_3;
     // 0x0029C3E0: nop
 
@@ -8307,7 +8307,7 @@ L_0029C3E8:
     // 0x0029C3F4: jal         0x0029E150
     // 0x0029C3F8: nop
 
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_4;
     // 0x0029C3F8: nop
 
@@ -8328,7 +8328,7 @@ L_0029C400:
     // 0x0029C40C: jal         0x0029E150
     // 0x0029C410: nop
 
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_5;
     // 0x0029C410: nop
 
@@ -8349,7 +8349,7 @@ L_0029C418:
     // 0x0029C424: jal         0x0029E150
     // 0x0029C428: nop
 
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_6;
     // 0x0029C428: nop
 
@@ -8370,7 +8370,7 @@ L_0029C430:
     // 0x0029C43C: jal         0x0029E150
     // 0x0029C440: nop
 
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_7;
     // 0x0029C440: nop
 
@@ -9215,7 +9215,7 @@ RECOMP_FUNC void func_0029CE64(uint8_t* rdram, recomp_context* ctx) {
     // 0x0029CEFC: jal         0x0029E150
     // 0x0029CF00: sw          $a3, 0x18($sp)
     MEM_W(0X18, ctx->r29) = ctx->r7;
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_2;
     // 0x0029CF00: sw          $a3, 0x18($sp)
     MEM_W(0X18, ctx->r29) = ctx->r7;
@@ -9452,7 +9452,7 @@ L_0029D030:
     // 0x0029D044: jal         0x0029E150
     // 0x0029D048: sw          $a3, 0x18($sp)
     MEM_W(0X18, ctx->r29) = ctx->r7;
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_3;
     // 0x0029D048: sw          $a3, 0x18($sp)
     MEM_W(0X18, ctx->r29) = ctx->r7;
@@ -9487,7 +9487,7 @@ L_0029D054:
     // 0x0029D078: jal         0x0029E150
     // 0x0029D07C: sw          $a3, 0x18($sp)
     MEM_W(0X18, ctx->r29) = ctx->r7;
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_4;
     // 0x0029D07C: sw          $a3, 0x18($sp)
     MEM_W(0X18, ctx->r29) = ctx->r7;
@@ -12426,7 +12426,7 @@ L_0029F4A8:
     // 0x0029F4A8: jal         0x0029E150
     // 0x0029F4AC: nop
 
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_0;
     // 0x0029F4AC: nop
 
@@ -12750,7 +12750,7 @@ L_0029F4A8:
     // 0x0029F4A8: jal         0x0029E150
     // 0x0029F4AC: nop
 
-    osVirtualToPhysical_recomp(rdram, ctx);
+    sp_osVirtualToPhysical(rdram, ctx);
         goto after_0;
     // 0x0029F4AC: nop
 
