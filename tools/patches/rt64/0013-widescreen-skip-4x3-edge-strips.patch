@@ -1,0 +1,35 @@
+diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
+index b3508da..e9a7e60 100644
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -1816,6 +1816,30 @@ namespace RT64 {
+                     instanceDrawCall.type = InstanceDrawCall::Type::Unknown;
+                 }
+ 
++                // Widescreen: games mask the left/right edge of their 4:3 picture with thin rectangles
++                // (South Park 64 draws one-pixel-wide strips there). Stretched to widescreen those stay at
++                // the old 4:3 edges and show up as vertical lines through the picture, which now carries
++                // on past them, so leave them out while the picture is widened.
++                if ((aspectRatioScale > 1.001f) && ((cycleType == G_CYC_FILL) || (proj.type == Projection::Type::Rectangle))) {
++                    const FixedRect &r = call.callDesc.rect;
++                    const FixedRect &sc = fbPair.scissorRect;
++                    const int32_t stripWidth = r.width(false, true);
++                    const bool thin = (stripWidth > 0) && (stripWidth <= 4);
++                    const bool tall = (r.height(false, true) * 2) >= sc.height(false, true);
++                    const bool atLeft = (r.left(false) <= (sc.left(false) + 1));
++                    const bool atRight = (r.right(true) >= (sc.right(true) - 1));
++                    if (thin && tall && (atLeft || atRight)) {
++                        instanceDrawCall.type = InstanceDrawCall::Type::Unknown;
++                        static int reports = 0;
++                        if (reports < 8) {
++                            reports++;
++                            fprintf(stderr, "[rt64] widescreen: skipped a %dx%d edge strip at x=%d..%d (%s, scissor x=%d..%d)\n",
++                                int(stripWidth), int(r.height(false, true)), int(r.left(false)), int(r.right(true)),
++                                (cycleType == G_CYC_FILL) ? "fill rect" : "texture rect", int(sc.left(false)), int(sc.right(true)));
++                        }
++                    }
++                }
++
+                 // Determine to use the draw call either in the RT scene or the raster scene.
+                 const uint32_t instanceIndex = static_cast<uint32_t>(instanceDrawCallVector.size());
+ #           if RT_ENABLED
