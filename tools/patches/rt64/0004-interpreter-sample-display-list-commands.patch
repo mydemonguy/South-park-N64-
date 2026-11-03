@@ -1,0 +1,76 @@
+diff --git a/src/hle/rt64_interpreter.cpp b/src/hle/rt64_interpreter.cpp
+index dccaa87..6028990 100644
+--- a/src/hle/rt64_interpreter.cpp
++++ b/src/hle/rt64_interpreter.cpp
+@@ -2,6 +2,8 @@
+ // RT64
+ //
+ 
++#include <cstdio>
++#include <string>
+ #include "rt64_interpreter.h"
+ 
+ #include <cassert>
+@@ -165,12 +167,36 @@ namespace RT64 {
+         // Check RDRAM if required.
+         state->checkRDRAM();
+ 
++        // South Park 64 diagnostics: for two sampled frames, tally every command (by opcode),
++        // the colours set, and commands with no handler, then log them -- to tell "the game
++        // draws black" from "the game's draws are lost".
++        static uint32_t sampledLists = 0;
++        const uint32_t listIndex = ++sampledLists;
++        const bool sampleThis = (listIndex == 150) || (listIndex == 900);
++        uint32_t opCounts[256] = {};
++        uint32_t unhandled[256] = {};
++        uint32_t colors[12] = {};           // (value, opcode) pairs
++        uint32_t colorCount = 0;
++        uint32_t commandCount = 0;
++
+         // Run the command interpreter.
+         DisplayList *dl = dlStart;
+         uint8_t opCode;
+         GBIFunction func;
+         while (dl != nullptr) {
+             opCode = (dl->w0 >> 24);
++            if (sampleThis) {
++                commandCount++;
++                opCounts[opCode]++;
++                // G_SETFILLCOLOR, G_SETPRIMCOLOR, G_SETENVCOLOR
++                if (((opCode == 0xF7) || (opCode == 0xFA) || (opCode == 0xFB)) && (colorCount + 2 <= 12)) {
++                    colors[colorCount++] = dl->w1;   // value
++                    colors[colorCount++] = opCode;   // which colour
++                }
++                if (!((extendedOpCode != 0) && (opCode == extendedOpCode)) && (hleGBI->map[opCode] == nullptr)) {
++                    unhandled[opCode]++;
++                }
++            }
+ 
+             if ((extendedOpCode != 0) && (opCode == extendedOpCode)) {
+                 extendedFunction(state, &dl);
+@@ -195,6 +221,25 @@ namespace RT64 {
+             }
+         }
+ 
++        if (sampleThis) {
++            std::string line;
++            char buf[48];
++            for (int op = 0; op < 256; op++) {
++                if (opCounts[op] != 0) {
++                    snprintf(buf, sizeof(buf), " %02X:%u%s", op, opCounts[op], unhandled[op] ? "(unhandled)" : "");
++                    line += buf;
++                }
++            }
++            fprintf(stderr, "[rt64] display list #%u: %u commands, by opcode:%s\n", listIndex, commandCount, line.c_str());
++            line.clear();
++            for (uint32_t i = 0; i + 1 < colorCount; i += 2) {
++                const uint32_t op = colors[i + 1];
++                snprintf(buf, sizeof(buf), " %s=%08X", (op == 0xF7) ? "fill" : (op == 0xFA) ? "prim" : "env", colors[i]);
++                line += buf;
++            }
++            fprintf(stderr, "[rt64] display list #%u colours:%s\n", listIndex, line.empty() ? " (none set)" : line.c_str());
++        }
++
+         state->dlCpuProfiler.end();
+     }
+ };
