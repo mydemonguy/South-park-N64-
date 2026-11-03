@@ -114,33 +114,3 @@ index c8e04c3..b3508da 100644
                  // Determine to use the draw call either in the RT scene or the raster scene.
                  const uint32_t instanceIndex = static_cast<uint32_t>(instanceDrawCallVector.size());
  #           if RT_ENABLED
-diff --git a/src/render/rt64_render_worker.cpp b/src/render/rt64_render_worker.cpp
-index 0250645..026b67d 100644
---- a/src/render/rt64_render_worker.cpp
-+++ b/src/render/rt64_render_worker.cpp
-@@ -4,6 +4,10 @@
- 
- #include "rt64_render_worker.h"
- 
-+#include <cstdio>
-+
-+#include <atomic>
-+
- namespace RT64 {
-     // RenderWorker
- 
-@@ -21,6 +25,14 @@ namespace RT64 {
-     RenderWorker::~RenderWorker() { }
- 
-     void RenderWorker::execute() {
-+        // South Park 64 diagnostics: the first GPU submissions by worker, so a lost device
-+        // can be matched to the work that ran just before it (failures log in between).
-+        static std::atomic<uint32_t> submissions{0};
-+        const uint32_t n = submissions.fetch_add(1, std::memory_order_relaxed);
-+        if (n < 60) {
-+            fprintf(stderr, "[rt64] submit #%u %s\n", n + 1, name.c_str());
-+        }
-+
-         commandQueue->executeCommandLists(commandList.get(), commandFence.get());
-     }
- 

@@ -1,0 +1,54 @@
+diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
+index 3ee06a8..b6a240b 100644
+--- a/plume_vulkan.cpp
++++ b/plume_vulkan.cpp
+@@ -3308,11 +3308,23 @@ namespace plume {
+ 
+         if (clearRectsCount > 0) {
+             for (uint32_t i = 0; i < clearRectsCount; i++) {
++                // vkCmdClearAttachments requires every rect to lie inside the render area. Callers
++                // pass game rectangles that can overhang it (South Park 64 fills 480x360 into a
++                // 480x359 target); Turnip clips them, Qualcomm's proprietary Adreno driver hangs the
++                // GPU (device lost). Clip here and drop rects that end up empty.
++                const int32_t left = std::max(clearRects[i].left, 0);
++                const int32_t top = std::max(clearRects[i].top, 0);
++                const int32_t right = std::min(clearRects[i].right, int32_t(width));
++                const int32_t bottom = std::min(clearRects[i].bottom, int32_t(height));
++                if ((right <= left) || (bottom <= top)) {
++                    continue;
++                }
++
+                 VkClearRect clearRect;
+-                clearRect.rect.offset.x = clearRects[i].left;
+-                clearRect.rect.offset.y = clearRects[i].top;
+-                clearRect.rect.extent.width = clearRects[i].right - clearRects[i].left;
+-                clearRect.rect.extent.height = clearRects[i].bottom - clearRects[i].top;
++                clearRect.rect.offset.x = left;
++                clearRect.rect.offset.y = top;
++                clearRect.rect.extent.width = uint32_t(right - left);
++                clearRect.rect.extent.height = uint32_t(bottom - top);
+                 clearRect.baseArrayLayer = 0;
+                 clearRect.layerCount = 1;
+                 rectVector.emplace_back(clearRect);
+@@ -3348,6 +3360,10 @@ namespace plume {
+         rgba[3] = colorValue.a;
+         attachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+         attachment.colorAttachment = attachmentIndex;
++        if (rectVector.empty()) {
++            return;
++        }
++
+         vkCmdClearAttachments(vk, 1, &attachment, uint32_t(rectVector.size()), rectVector.data());
+     }
+ 
+@@ -3371,6 +3387,10 @@ namespace plume {
+             attachment.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+         }
+ 
++        if (rectVector.empty()) {
++            return;
++        }
++
+         vkCmdClearAttachments(vk, 1, &attachment, uint32_t(rectVector.size()), rectVector.data());
+     }
+ 
