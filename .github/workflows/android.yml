@@ -101,6 +101,18 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      # The APK's libGoemon64.so is stripped, and RT64 / the runtime are hidden
+      # symbols, so on-device crash reports show bare offsets. Keep the unstripped
+      # library (RelWithDebInfo, -g) to symbolize them:
+      #   llvm-symbolizer --obj=libGoemon64.so 0x<offset>
+      - name: Upload unstripped native library (for crash symbolization)
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: SouthPark64-symbols-${{ github.sha }}
+          path: android/app/build/intermediates/cxx/**/obj/arm64-v8a/libGoemon64.so
+          if-no-files-found: warn
+          retention-days: 30
+
       # A plain .apk on a release page is much easier to grab from a phone than a
       # zipped workflow artifact. Every push to main replaces the "latest" release.
       - name: Publish APK to the "latest" release
