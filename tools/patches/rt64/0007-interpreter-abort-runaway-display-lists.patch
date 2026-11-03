@@ -1,0 +1,95 @@
+diff --git a/src/hle/rt64_interpreter.cpp b/src/hle/rt64_interpreter.cpp
+index ddae44d..95469ce 100644
+--- a/src/hle/rt64_interpreter.cpp
++++ b/src/hle/rt64_interpreter.cpp
+@@ -2,6 +2,7 @@
+ // RT64
+ //
+ 
++#include <algorithm>
+ #include <cstdio>
+ #include <string>
+ #include "rt64_interpreter.h"
+@@ -184,6 +185,13 @@ namespace RT64 {
+         uint32_t colorImageCount = 0;
+         uint32_t texRectsPerImage[6] = {};
+ 
++        struct GuardEntry { uint32_t address, w0, w1; };
++        constexpr uint32_t GuardHistorySize = 12;
++        GuardEntry guardHistory[GuardHistorySize] = {};
++        uint32_t guardHistoryCursor = 0;
++        uint32_t guardCommands = 0;
++        uint32_t guardUnhandled = 0;
++
+         // Run the command interpreter.
+         DisplayList *dl = dlStart;
+         uint8_t opCode;
+@@ -214,6 +222,68 @@ namespace RT64 {
+                 }
+             }
+ 
++            // South Park 64 guard: stop a display list that has run into data that isn't commands
++            // (seen as nonsense color images) before it hangs the renderer, and log where it came from.
++            {
++                const uint32_t dlAddress = uint32_t(reinterpret_cast<const uint8_t *>(dl) - state->RDRAM);
++                guardHistory[guardHistoryCursor % GuardHistorySize] = { dlAddress, dl->w0, dl->w1 };
++                guardHistoryCursor++;
++                guardCommands++;
++                const bool extended = (extendedOpCode != 0) && (opCode == extendedOpCode);
++                const char *abortReason = nullptr;
++                if (!extended && (hleGBI->map[opCode] == nullptr)) {
++                    guardUnhandled++;
++                    if (guardUnhandled >= 8) {
++                        abortReason = "8 commands with no handler";
++                    }
++                }
++                if ((opCode == 0xFF) && (hleGBI->map[opCode] != nullptr)) {
++                    const uint32_t fmt = (dl->w0 >> 21) & 0x7;
++                    const uint32_t siz = (dl->w0 >> 19) & 0x3;
++                    const uint32_t width = (dl->w0 & 0xFFF) + 1;
++                    if ((fmt > 4) || (siz == 0) || (width > 1024)) {
++                        abortReason = "invalid color image";
++                    }
++                }
++                if (state->returnAddressStack.size() > 32) {
++                    abortReason = "display list call stack deeper than 32";
++                }
++                if (guardCommands > 2000000) {
++                    abortReason = "more than 2,000,000 commands";
++                }
++
++                if (abortReason != nullptr) {
++                    static int reports = 0;
++                    if (reports < 6) {
++                        reports++;
++                        fprintf(stderr, "[rt64] display list #%u ABORTED (%s) at 0x%06X: %08X %08X, after %u commands, call depth %zu, task DL 0x%08X\n",
++                            listIndex, abortReason, dlAddress, dl->w0, dl->w1, guardCommands, state->returnAddressStack.size(), dlStartAdddress);
++                        const uint32_t count = std::min<uint32_t>(guardHistoryCursor, GuardHistorySize);
++                        for (uint32_t i = 0; i < count; i++) {
++                            const GuardEntry &e = guardHistory[(guardHistoryCursor - count + i) % GuardHistorySize];
++                            fprintf(stderr, "[rt64]   0x%06X: %08X %08X\n", e.address, e.w0, e.w1);
++                        }
++                        std::string segs;
++                        char buf[24];
++                        for (uint32_t i = 0; i < 16; i++) {
++                            snprintf(buf, sizeof(buf), " %X=%08X", i, state->rsp->segments[i]);
++                            segs += buf;
++                        }
++                        fprintf(stderr, "[rt64]   segments:%s\n", segs.c_str());
++                        for (size_t i = 0; i < state->returnAddressStack.size() && i < 8; i++) {
++                            fprintf(stderr, "[rt64]   return %zu: 0x%06X\n", i,
++                                unsigned(reinterpret_cast<const uint8_t *>(state->returnAddressStack[i]) - state->RDRAM));
++                        }
++                    }
++                    else if ((reports < 1000) && ((++reports % 100) == 0)) {
++                        fprintf(stderr, "[rt64] display lists aborted: %d so far\n", reports);
++                    }
++
++                    state->returnAddressStack.clear();
++                    break;
++                }
++            }
++
+             if ((extendedOpCode != 0) && (opCode == extendedOpCode)) {
+                 extendedFunction(state, &dl);
+             }
