@@ -51,8 +51,14 @@ namespace southpark::status {
             std::fprintf(stderr, "[status] %lds gfx=%u audio=%u screen=%u dma=%u vm_pages=%u\n",
                          seconds, gfx_tasks.load(), audio_buffers.load(), screen_updates.load(),
                          southpark_dma_count(), southpark_vm_pages_in());
-            std::lock_guard lock{ threads_mutex };
-            for (const OSThread* t : threads) {
+            // Copy the list and name threads without holding the lock: the naming
+            // callback registers threads itself (register_thread takes the lock).
+            std::vector<const OSThread*> snapshot;
+            {
+                std::lock_guard lock{ threads_mutex };
+                snapshot = threads;
+            }
+            for (const OSThread* t : snapshot) {
                 std::string name = goemon64::get_game_thread_name(t);
                 const uint32_t addr = (uint32_t)((const uint8_t*)t - rdram) + 0x80000000u;
                 if (t->context == nullptr && t->state == STOPPED) {
