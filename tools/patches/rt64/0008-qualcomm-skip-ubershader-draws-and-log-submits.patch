@@ -1,0 +1,146 @@
+diff --git a/src/common/rt64_device_workarounds.cpp b/src/common/rt64_device_workarounds.cpp
+index 3aa9b4e..3cfd56b 100644
+--- a/src/common/rt64_device_workarounds.cpp
++++ b/src/common/rt64_device_workarounds.cpp
+@@ -50,4 +50,17 @@ namespace RT64 {
+     bool GetFramebufferSyncEnabled() {
+         return framebufferSyncEnabled.load(std::memory_order_relaxed);
+     }
++
++    static std::atomic<bool> ubershadersEnabled = true;
++
++    void SetUbershadersEnabled(bool enabled) {
++        const bool previous = ubershadersEnabled.exchange(enabled, std::memory_order_relaxed);
++        if (previous != enabled) {
++            fprintf(stderr, "[rt64] ubershaders %s\n", enabled ? "ENABLED" : "DISABLED (driver workaround: a draw waits for its specialized shader)");
++        }
++    }
++
++    bool GetUbershadersEnabled() {
++        return ubershadersEnabled.load(std::memory_order_relaxed);
++    }
+ };
+diff --git a/src/common/rt64_device_workarounds.h b/src/common/rt64_device_workarounds.h
+index df0202d..3889464 100644
+--- a/src/common/rt64_device_workarounds.h
++++ b/src/common/rt64_device_workarounds.h
+@@ -36,4 +36,13 @@ namespace RT64 {
+     // otherwise, not a performance option.
+     void SetFramebufferSyncEnabled(bool enabled);
+     bool GetFramebufferSyncEnabled();
++
++    // Drawing with the ubershader (the general raster shader used while a draw's
++    // specialized shader is still compiling). On Qualcomm's proprietary driver
++    // (Adreno 710, driver 0x80320046) the GPU is lost ~2 s into the first game frames,
++    // with framebuffer sync off as well, while Turnip on the same device is fine.
++    // Disabled, a draw whose specialized shader is not ready yet is skipped instead
++    // (it appears once its shader has compiled, usually within a few frames).
++    void SetUbershadersEnabled(bool enabled);
++    bool GetUbershadersEnabled();
+ };
+diff --git a/src/hle/rt64_application.cpp b/src/hle/rt64_application.cpp
+index a10fbdf..52de180 100644
+--- a/src/hle/rt64_application.cpp
++++ b/src/hle/rt64_application.cpp
+@@ -3,6 +3,8 @@
+ //
+ 
+ #include "rt64_application.h"
++
++#include "common/rt64_device_workarounds.h"
+ #include "rhi/rt64_render_hooks.h"
+ 
+ #include <cinttypes>
+@@ -206,6 +208,13 @@ namespace RT64 {
+         // Detect if the application should use hardware resolve or not.
+         bool usesHardwareResolve = (userConfig.hardwareResolve != UserConfiguration::HardwareResolve::Disabled);
+ 
++        // Qualcomm's proprietary Adreno driver loses the device on the first game frames
++        // (see SetUbershadersEnabled). Mesa Turnip reports the same vendor ID, so it is told
++        // apart by name.
++        if ((uint32_t(deviceDescription.vendor) == 0x5143) && (deviceDescription.name.find("Turnip") == std::string::npos)) {
++            SetUbershadersEnabled(false);
++        }
++
+         // Driver workarounds.
+         bool automaticGraphicsAPI = (userConfig.graphicsAPI == UserConfiguration::GraphicsAPI::Automatic);
+         bool forceVulkanForCompatibility = false;
+diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
+index c8e04c3..b3508da 100644
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -4,6 +4,9 @@
+ 
+ #include "rt64_framebuffer_renderer.h"
+ 
++#include <cstdio>
++#include "common/rt64_device_workarounds.h"
++
+ #include "../include/rt64_extended_gbi.h"
+ 
+ #include "common/rt64_elapsed_timer.h"
+@@ -1571,6 +1574,7 @@ namespace RT64 {
+ 
+             for (uint32_t d = 0; (d < proj.gameCallCount) && (globalCallIndex < p.maxGameCall); d++) {
+                 const GameCall &call = proj.gameCalls[d];
++                bool skipForUbershader = false;
+                 renderIndices.instanceIndex = call.callDesc.callIndex;
+                 renderIndices.faceIndicesStart = call.meshDesc.faceIndicesStart;
+                 renderIndices.rdpTileIndex = call.callDesc.tileIndex;
+@@ -1711,6 +1715,15 @@ namespace RT64 {
+                         if (gpuShader != nullptr) {
+                             triangles.pipeline = gpuShader->pipeline.get();
+                         }
++                        else if (!p.ubershadersOnly && !GetUbershadersEnabled()) {
++                            // Driver workaround: skip the draw until its specialized shader exists.
++                            skipForUbershader = true;
++                            static uint64_t skipped = 0;
++                            skipped++;
++                            if ((skipped == 1) || ((skipped % 5000) == 0)) {
++                                fprintf(stderr, "[rt64] draws skipped while their shader compiles: %llu\n", (unsigned long long)(skipped));
++                            }
++                        }
+                         else {
+                             const bool copyMode = (call.shaderDesc.otherMode.cycleType() == G_CYC_COPY);
+                             triangles.pipeline = rasterShaderUber->getPipeline(
+@@ -1799,6 +1812,10 @@ namespace RT64 {
+                     }
+                 }
+ 
++                if (skipForUbershader) {
++                    instanceDrawCall.type = InstanceDrawCall::Type::Unknown;
++                }
++
+                 // Determine to use the draw call either in the RT scene or the raster scene.
+                 const uint32_t instanceIndex = static_cast<uint32_t>(instanceDrawCallVector.size());
+ #           if RT_ENABLED
+diff --git a/src/render/rt64_render_worker.cpp b/src/render/rt64_render_worker.cpp
+index 0250645..026b67d 100644
+--- a/src/render/rt64_render_worker.cpp
++++ b/src/render/rt64_render_worker.cpp
+@@ -4,6 +4,10 @@
+ 
+ #include "rt64_render_worker.h"
+ 
++#include <cstdio>
++
++#include <atomic>
++
+ namespace RT64 {
+     // RenderWorker
+ 
+@@ -21,6 +25,14 @@ namespace RT64 {
+     RenderWorker::~RenderWorker() { }
+ 
+     void RenderWorker::execute() {
++        // South Park 64 diagnostics: the first GPU submissions by worker, so a lost device
++        // can be matched to the work that ran just before it (failures log in between).
++        static std::atomic<uint32_t> submissions{0};
++        const uint32_t n = submissions.fetch_add(1, std::memory_order_relaxed);
++        if (n < 60) {
++            fprintf(stderr, "[rt64] submit #%u %s\n", n + 1, name.c_str());
++        }
++
+         commandQueue->executeCommandLists(commandList.get(), commandFence.get());
+     }
+ 
