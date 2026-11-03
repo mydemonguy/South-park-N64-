@@ -1,0 +1,28 @@
+diff --git a/ultramodern/src/events.cpp b/ultramodern/src/events.cpp
+index c520789..4a8d102 100644
+--- a/ultramodern/src/events.cpp
++++ b/ultramodern/src/events.cpp
+@@ -424,11 +424,10 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+                     renderer_context->enable_instant_present();
+                     enabled_instant_present = true;
+                 }
+-                // Tell the game that the RSP completed instantly. This will allow it to queue other task types, but it won't
+-                // start another graphics task until the RDP is also complete. Games usually preserve the RSP inputs until the RDP
+-                // is finished as well, so sending this early shouldn't be an issue in most cases.
+-                // If this causes issues then the logic can be replaced with responding to yield requests.
+-                sp_complete();
++                // South Park 64: the RSP is reported complete only after the display list has been parsed. The stock
++                // runtime reported it before parsing ("games usually preserve the RSP inputs until the RDP is finished"),
++                // but this game reuses the display list buffer as soon as the RSP is done and overwrote it while rt64
++                // was still reading it (display list calls jumping into code and vertex data).
+                 ultramodern::measure_input_latency();
+ 
+                 PTR(u64) displaylist = task_action->task.t.data_ptr;
+@@ -438,6 +437,7 @@ void gfx_thread_func(uint8_t* rdram, moodycamel::LightweightSemaphore* thread_re
+                 renderer_context->send_dl(&task_action->task);
+                 [[maybe_unused]] auto renderer_end = std::chrono::high_resolution_clock::now();
+ 
++                sp_complete();
+                 dp_complete();
+                 // TODO hook the parsed event up to the actual parsing point when a callback is added to RT64.
+                 ultramodern::extensions::on_displaylist_parsed(displaylist);
