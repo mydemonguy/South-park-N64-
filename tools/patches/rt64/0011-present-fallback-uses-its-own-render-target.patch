@@ -1,0 +1,19 @@
+diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
+index 075a4f1..3d9949c 100644
+--- a/src/hle/rt64_present_queue.cpp
++++ b/src/hle/rt64_present_queue.cpp
+@@ -249,7 +249,13 @@ namespace RT64 {
+                 lockedWorkloadMutex = true;
+                 ext.sharedResources->workloadMutex.lock();
+ 
+-                RenderTargetKey colorTargetKey(fbAddress, scratchFb.width, scratchFb.siz, Framebuffer::Type::Color);
++                // A target of its own, not the one the game's framebuffer at this address will use:
++                // sharing it let this (present) queue and the workload queue use and resize the same
++                // texture, which lost the GPU device on Qualcomm's proprietary Adreno driver once the
++                // game started drawing into the framebuffer the VI had been showing from RAM.
++                // Framebuffer addresses are below 16 MB, so bit 31 cannot collide with a real one.
++                const uint32_t ScratchAddressFlag = 0x80000000U;
++                RenderTargetKey colorTargetKey(fbAddress | ScratchAddressFlag, scratchFb.width, scratchFb.siz, Framebuffer::Type::Color);
+                 colorTarget = &targetManager.get(colorTargetKey, true);
+                 colorTarget->resize(ext.presentGraphicsWorker, scratchFb.width, scratchFb.height);
+                 colorTarget->resolutionScale = { 1.0f, 1.0f };

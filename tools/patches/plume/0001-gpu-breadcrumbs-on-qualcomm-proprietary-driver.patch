@@ -1,5 +1,5 @@
 diff --git a/plume_vulkan.cpp b/plume_vulkan.cpp
-index 3ee06a8..7486431 100644
+index 3ee06a8..6e0049e 100644
 --- a/plume_vulkan.cpp
 +++ b/plume_vulkan.cpp
 @@ -11,8 +11,11 @@
@@ -14,7 +14,15 @@ index 3ee06a8..7486431 100644
  #include <unordered_map>
  
  #if DLSS_ENABLED
-@@ -1415,6 +1418,7 @@ namespace plume {
+@@ -1060,6 +1063,7 @@ namespace plume {
+     }
+ 
+     void VulkanTexture::setName(const std::string &name) {
++        debugName = name;
+         setObjectName(device->vk, VK_OBJECT_TYPE_IMAGE, uint64_t(vk), name);
+     }
+ 
+@@ -1415,6 +1419,7 @@ namespace plume {
      }
  
      void VulkanComputePipeline::setName(const std::string &name) {
@@ -22,7 +30,7 @@ index 3ee06a8..7486431 100644
          setObjectName(device->vk, VK_OBJECT_TYPE_PIPELINE, uint64_t(vk), name);
      }
  
-@@ -1678,6 +1682,7 @@ namespace plume {
+@@ -1678,6 +1683,7 @@ namespace plume {
      }
  
      void VulkanGraphicsPipeline::setName(const std::string &name) {
@@ -30,7 +38,7 @@ index 3ee06a8..7486431 100644
          setObjectName(device->vk, VK_OBJECT_TYPE_PIPELINE, uint64_t(vk), name);
      }
  
-@@ -2973,6 +2978,86 @@ namespace plume {
+@@ -2973,6 +2979,86 @@ namespace plume {
          }
      }
  
@@ -117,7 +125,7 @@ index 3ee06a8..7486431 100644
      void VulkanCommandList::begin() {
          vkResetCommandBuffer(vk, 0);
  
-@@ -2989,6 +3074,7 @@ namespace plume {
+@@ -2989,6 +3075,7 @@ namespace plume {
  
      void VulkanCommandList::end() {
          endActiveRenderPass();
@@ -125,7 +133,7 @@ index 3ee06a8..7486431 100644
  
          VkResult res = vkEndCommandBuffer(vk);
          if (res != VK_SUCCESS) {
-@@ -3069,6 +3155,10 @@ namespace plume {
+@@ -3069,6 +3156,10 @@ namespace plume {
      void VulkanCommandList::dispatch(uint32_t threadGroupCountX, uint32_t threadGroupCountY, uint32_t threadGroupCountZ) {
          assert(activeComputePipelineLayout != nullptr);
  
@@ -136,7 +144,7 @@ index 3ee06a8..7486431 100644
          vkCmdDispatch(vk, threadGroupCountX, threadGroupCountY, threadGroupCountZ);
      }
  
-@@ -3138,11 +3228,21 @@ namespace plume {
+@@ -3138,11 +3229,21 @@ namespace plume {
                  return;
              }
              vkCmdBindPipeline(vk, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline->vk);
@@ -158,18 +166,26 @@ index 3ee06a8..7486431 100644
              break;
          }
          case VulkanPipeline::Type::Raytracing: {
-@@ -3661,6 +3761,10 @@ namespace plume {
+@@ -3661,6 +3762,18 @@ namespace plume {
          assert(targetFramebuffer != nullptr);
          
          if (activeRenderPass == VK_NULL_HANDLE) {
 +            if (crumbsEnabled.load(std::memory_order_relaxed)) {
-+                passCrumb = breadcrumb("render pass " + std::to_string(targetFramebuffer->width) + "x" + std::to_string(targetFramebuffer->height) + ": " + boundGraphicsName);
++                std::string targets;
++                for (const VulkanTexture *attachment : targetFramebuffer->colorAttachments) {
++                    targets += (attachment != nullptr) ? (attachment->debugName.empty() ? std::string("(unnamed)") : attachment->debugName) : std::string("(null)");
++                    targets += " ";
++                }
++                if (targetFramebuffer->depthAttachment != nullptr) {
++                    targets += "+ depth " + (targetFramebuffer->depthAttachment->debugName.empty() ? std::string("(unnamed)") : targetFramebuffer->depthAttachment->debugName) + " ";
++                }
++                passCrumb = breadcrumb("render pass " + std::to_string(targetFramebuffer->width) + "x" + std::to_string(targetFramebuffer->height) + " [" + targets + "]: " + boundGraphicsName);
 +            }
 +
              VkRenderPassBeginInfo beginInfo = {};
              beginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
              beginInfo.renderPass = targetFramebuffer->renderPass;
-@@ -3824,6 +3928,9 @@ namespace plume {
+@@ -3824,6 +3937,9 @@ namespace plume {
  
          if (res != VK_SUCCESS) {
              fprintf(stderr, "vkQueueSubmit failed with error code 0x%X.\n", res);
@@ -179,7 +195,7 @@ index 3ee06a8..7486431 100644
              return;
          }
      }
-@@ -3835,6 +3942,9 @@ namespace plume {
+@@ -3835,6 +3951,9 @@ namespace plume {
          VkResult res = vkWaitForFences(device->vk, 1, &interfaceFence->vk, VK_TRUE, UINT64_MAX);
          if (res != VK_SUCCESS) {
              fprintf(stderr, "vkWaitForFences failed with error code 0x%X.\n", res);
@@ -189,7 +205,7 @@ index 3ee06a8..7486431 100644
              return;
          }
  
-@@ -4331,6 +4441,8 @@ namespace plume {
+@@ -4331,6 +4450,8 @@ namespace plume {
              return;
          }
  
@@ -199,10 +215,18 @@ index 3ee06a8..7486431 100644
          VkDeviceSize memoryHeapSize = 0;
          const VkPhysicalDeviceMemoryProperties *memoryProps = nullptr;
 diff --git a/plume_vulkan.h b/plume_vulkan.h
-index 050c47a..4833c15 100644
+index 050c47a..4222148 100644
 --- a/plume_vulkan.h
 +++ b/plume_vulkan.h
-@@ -167,6 +167,7 @@ namespace plume {
+@@ -88,6 +88,7 @@ namespace plume {
+         RenderBarrierStages barrierStages = RenderBarrierStage::NONE;
+         bool ownership = false;
+         RenderTextureDesc desc;
++        std::string debugName;   // From setName(); used by the GPU breadcrumbs.
+ 
+         VulkanTexture() = default;
+         VulkanTexture(VulkanDevice *device, VulkanPool *pool, const RenderTextureDesc &desc);
+@@ -167,6 +168,7 @@ namespace plume {
  
          VulkanDevice *device = nullptr;
          Type type = Type::Unknown;
@@ -210,7 +234,7 @@ index 050c47a..4833c15 100644
  
          VulkanPipeline(VulkanDevice *device, Type type);
          virtual ~VulkanPipeline() override;
-@@ -312,8 +313,12 @@ namespace plume {
+@@ -312,8 +314,12 @@ namespace plume {
          const VulkanPipelineLayout *activeGraphicsPipelineLayout = nullptr;
          const VulkanPipelineLayout *activeRaytracingPipelineLayout = nullptr;
          VkRenderPass activeRenderPass = VK_NULL_HANDLE;
