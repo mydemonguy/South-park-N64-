@@ -2527,7 +2527,7 @@ functions = [
     { name = "osSendMesg", vram = 0x0029DA10, size = 0x130 },
     { name = "sp_osSetEventMesg", vram = 0x0029DB40, size = 0x5C },
     { name = "func_0029DB9C", vram = 0x0029DB9C, size = 0xC8 },
-    { name = "osSetThreadPri", vram = 0x0029DBA0, size = 0xC4 },
+    { name = "sp_osSetThreadPri", vram = 0x0029DBA0, size = 0xC4 },
     { name = "func_0029DC64", vram = 0x0029DC64, size = 0x90 },
     { name = "osSetTimer", vram = 0x0029DC68, size = 0x8C },
     { name = "func_0029DCF4", vram = 0x0029DCF4, size = 0x118 },

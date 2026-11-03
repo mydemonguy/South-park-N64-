@@ -17,6 +17,9 @@
 //                           to page them in (its handler is func_002903DC). There are no
 //                           CPU exceptions under the recompiler, so the host SIGSEGV
 //                           handler pages them in instead (southpark_tlb_handle_fault).
+//   * sp_osSetThreadPri   - the runtime's thread_queue_remove only ever checks the head
+//                           of a queue, so changing the priority of another thread that
+//                           is queued behind others corrupts the queue (see below).
 //   * sp_cart_io_read/write - PI I/O helpers used by the game's streaming code.
 //   * Stand-ins for libultra internals that recompiled game code still calls (SI
 //     access for Controller Pak / reset paths) and guards for internals that should
@@ -32,6 +35,7 @@
 #include <cstring>
 #include <mutex>
 #include <span>
+#include <vector>
 
 #if !defined(_WIN32)
 #include <sys/mman.h>
@@ -532,6 +536,54 @@ SP_UNREACHABLE(__osInsertTimer)
 SP_UNREACHABLE(__osSetTimerIntr)
 SP_UNREACHABLE(__osSetCompare)
 SP_UNREACHABLE(__osProbeTLB)
+
+// osSetThreadPri(OSThread* t, OSPri pri)
+//
+// ultramodern's version removes t from its queue with thread_queue_remove(), whose loop
+// never advances past the head: if t is not first, nothing is removed and the insert
+// that follows links t in a second time, cutting off or looping the rest of the queue.
+// The game raises and lowers other threads' priorities (func_0021F1A4, and the
+// scheduler's thread at sc+0x1AB0 from func_00257E98 / func_002590F0), so threads can
+// drop out of the run queue for good. Rebuild the queue instead, with the runtime's own
+// pop/insert (which also reach the run queue, whose head the runtime keeps private).
+extern "C" void sp_osSetThreadPri(uint8_t* rdram, recomp_context* ctx) {
+    PTR(OSThread) t_ = (PTR(OSThread))ctx->r4;
+    const OSPri pri = (OSPri)ctx->r5;
+    if (t_ == NULLPTR) {
+        t_ = ultramodern::this_thread();
+    }
+    OSThread* t = TO_PTR(OSThread, t_);
+    if (t->priority == pri) {
+        return;
+    }
+    const PTR(PTR(OSThread)) q = t->queue;
+    if (t_ != ultramodern::this_thread() && t->state != OSThreadState::STOPPED && q != NULLPTR) {
+        std::vector<PTR(OSThread)> rest;
+        bool found = false;
+        while (!ultramodern::thread_queue_empty(PASS_RDRAM q) && rest.size() < 256) {
+            PTR(OSThread) x = ultramodern::thread_queue_pop(PASS_RDRAM q);
+            if (x == t_) {
+                found = true;
+            } else {
+                rest.push_back(x);
+            }
+        }
+        // insert() goes in front of equal priorities, so put the others back last-first
+        // to keep their order; then t, as the runtime's remove+insert intends.
+        for (auto it = rest.rbegin(); it != rest.rend(); ++it) {
+            ultramodern::thread_queue_insert(PASS_RDRAM q, *it);
+        }
+        t->priority = pri;
+        if (found) {
+            ultramodern::thread_queue_insert(PASS_RDRAM q, t_);
+        } else {
+            t->queue = q;   // not actually linked (e.g. running); keep its queue as it was
+        }
+    } else {
+        t->priority = pri;
+    }
+    ultramodern::check_running_queue(PASS_RDRAM1);
+}
 
 // For the session-log status lines (src/main/southpark_status.cpp).
 extern "C" uint32_t southpark_dma_count() { return dma_count.load(std::memory_order_relaxed); }

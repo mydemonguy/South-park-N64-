@@ -411,6 +411,10 @@ static void southpark_entrypoint(uint8_t* rdram, recomp_context* ctx) {
     if (tlb_ok) {
         southpark_map_boot_tlb(rdram);
     }
+#ifndef SOUTHPARK_BUILD_ID
+#define SOUTHPARK_BUILD_ID "unknown"
+#endif
+    fprintf(stderr, "[southpark] build %s\n", SOUTHPARK_BUILD_ID);
     fprintf(stderr, "[southpark] entrypoint: shared RDRAM %s, starting game_boot\n", tlb_ok ? "ok" : "FAILED");
     southpark::status::start(rdram);
     // Code runs at TLB-mapped addresses; make indirect calls through them resolve.

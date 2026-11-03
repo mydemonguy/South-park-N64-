@@ -158,6 +158,14 @@ endif()
 
 target_include_directories(rt64 PRIVATE ${CMAKE_BINARY_DIR}/rt64/src)
 
+# Build id for the session log ("[southpark] build <commit>").
+execute_process(COMMAND git rev-parse --short HEAD WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                OUTPUT_VARIABLE SOUTHPARK_BUILD_ID OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+if(NOT SOUTHPARK_BUILD_ID)
+    set(SOUTHPARK_BUILD_ID "unknown")
+endif()
+add_compile_definitions(SOUTHPARK_BUILD_ID="${SOUTHPARK_BUILD_ID}")
+
 # RecompiledFuncs - Library containing the primary recompiler output
 add_library(RecompiledFuncs STATIC)
 

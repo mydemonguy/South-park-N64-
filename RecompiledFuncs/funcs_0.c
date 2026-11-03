@@ -26633,7 +26633,7 @@ RECOMP_FUNC void func_00209510(uint8_t* rdram, recomp_context* ctx) {
     // 0x0020956C: jal         0x0029DBA0
     // 0x00209570: addu        $a0, $zero, $zero
     ctx->r4 = ADD32(0, 0);
-    osSetThreadPri_recomp(rdram, ctx);
+    sp_osSetThreadPri(rdram, ctx);
         goto after_2;
     // 0x00209570: addu        $a0, $zero, $zero
     ctx->r4 = ADD32(0, 0);

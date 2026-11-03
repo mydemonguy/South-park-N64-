@@ -17,6 +17,7 @@ ignored = [
     "sp_osMapTLB",
     "sp_osPiRawStartDma",
     "sp_osSetEventMesg",
+    "sp_osSetThreadPri",
     "sp_osUnmapTLB",
     "sp_osUnmapTLBAll",
 ]

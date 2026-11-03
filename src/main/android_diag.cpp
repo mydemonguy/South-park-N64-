@@ -47,6 +47,9 @@
 namespace southpark::crashlog {
     void write_raw(const char* data, size_t n);
 }
+namespace southpark::status {
+    void report_now(const char* why);
+}
 
 // Game demand paging (src/game/southpark_os.cpp): a TLB miss on one of the game's VM
 // regions arrives here as SIGSEGV and is serviced before anything is reported.
@@ -72,6 +75,9 @@ namespace goemon64::diag {
 
     void set_phase(int phase) {
         g_phase.store(phase, std::memory_order_relaxed);
+        if (phase == Background) {
+            southpark::status::report_now("app went to the background");
+        }
         DIAGI("lifecycle phase -> %s",
               phase == Foreground ? "FOREGROUND" :
               phase == Background ? "BACKGROUND" : "RESUMING");

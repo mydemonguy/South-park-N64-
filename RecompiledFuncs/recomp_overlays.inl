@@ -2493,7 +2493,6 @@ static FuncEntry section_1_main_funcs[] = {
     { .func = func_0029DA0C, .offset = 0x0009D4E4, .rom_size = 0x00000134 },
     { .func = osSendMesg_recomp, .offset = 0x0009D4E8, .rom_size = 0x00000000 },
     { .func = func_0029DB9C, .offset = 0x0009D674, .rom_size = 0x000000C8 },
-    { .func = osSetThreadPri_recomp, .offset = 0x0009D678, .rom_size = 0x00000000 },
     { .func = func_0029DC64, .offset = 0x0009D73C, .rom_size = 0x00000090 },
     { .func = osSetTimer_recomp, .offset = 0x0009D740, .rom_size = 0x00000000 },
     { .func = func_0029DCF4, .offset = 0x0009D7CC, .rom_size = 0x00000118 },

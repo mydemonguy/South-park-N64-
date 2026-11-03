@@ -2492,7 +2492,6 @@ void osRecvMesg_recomp(uint8_t* rdram, recomp_context* ctx);
 void func_0029DA0C(uint8_t* rdram, recomp_context* ctx);
 void osSendMesg_recomp(uint8_t* rdram, recomp_context* ctx);
 void func_0029DB9C(uint8_t* rdram, recomp_context* ctx);
-void osSetThreadPri_recomp(uint8_t* rdram, recomp_context* ctx);
 void func_0029DC64(uint8_t* rdram, recomp_context* ctx);
 void osSetTimer_recomp(uint8_t* rdram, recomp_context* ctx);
 void func_0029DCF4(uint8_t* rdram, recomp_context* ctx);

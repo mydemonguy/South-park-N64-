@@ -1,4 +1,6 @@
 #include <cstdio>
+
+namespace southpark::status { void report_now(const char* why); }
 #include <algorithm>
 #include <atomic>
 #include <mutex>
@@ -251,6 +253,7 @@ bool sdl_event_filter(void* userdata, SDL_Event* event) {
         // same action the prompt's "Quit" button performs) and let game_main
         // unwind and join the save thread cleanly.
         fprintf(stderr, "[session] quit requested: Android is destroying the activity (SDL_QUIT)\n");
+        southpark::status::report_now("quit");
         ultramodern::quit();
         return true;
 #else

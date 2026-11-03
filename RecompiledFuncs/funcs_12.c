@@ -13093,7 +13093,7 @@ L_0029F688:
     // 0x0029F6BC: jal         0x0029DBA0
     // 0x0029F6C0: addu        $a1, $s4, $zero
     ctx->r5 = ADD32(ctx->r20, 0);
-    osSetThreadPri_recomp(rdram, ctx);
+    sp_osSetThreadPri(rdram, ctx);
         goto after_8;
     // 0x0029F6C0: addu        $a1, $s4, $zero
     ctx->r5 = ADD32(ctx->r20, 0);
@@ -13194,7 +13194,7 @@ L_0029F6C4:
     // 0x0029F754: jal         0x0029DBA0
     // 0x0029F758: addu        $a1, $s3, $zero
     ctx->r5 = ADD32(ctx->r19, 0);
-    osSetThreadPri_recomp(rdram, ctx);
+    sp_osSetThreadPri(rdram, ctx);
         goto after_13;
     // 0x0029F758: addu        $a1, $s3, $zero
     ctx->r5 = ADD32(ctx->r19, 0);
@@ -13352,7 +13352,7 @@ L_0029F688:
     // 0x0029F6BC: jal         0x0029DBA0
     // 0x0029F6C0: addu        $a1, $s4, $zero
     ctx->r5 = ADD32(ctx->r20, 0);
-    osSetThreadPri_recomp(rdram, ctx);
+    sp_osSetThreadPri(rdram, ctx);
         goto after_5;
     // 0x0029F6C0: addu        $a1, $s4, $zero
     ctx->r5 = ADD32(ctx->r20, 0);
@@ -13453,7 +13453,7 @@ L_0029F6C4:
     // 0x0029F754: jal         0x0029DBA0
     // 0x0029F758: addu        $a1, $s3, $zero
     ctx->r5 = ADD32(ctx->r19, 0);
-    osSetThreadPri_recomp(rdram, ctx);
+    sp_osSetThreadPri(rdram, ctx);
         goto after_10;
     // 0x0029F758: addu        $a1, $s3, $zero
     ctx->r5 = ADD32(ctx->r19, 0);

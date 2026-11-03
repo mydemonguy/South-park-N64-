@@ -14328,7 +14328,7 @@ L_0021F1C0:
     // 0x0021F1C8: jal         0x0029DBA0
     // 0x0021F1CC: addu        $a0, $s0, $zero
     ctx->r4 = ADD32(ctx->r16, 0);
-    osSetThreadPri_recomp(rdram, ctx);
+    sp_osSetThreadPri(rdram, ctx);
         goto after_0;
     // 0x0021F1CC: addu        $a0, $s0, $zero
     ctx->r4 = ADD32(ctx->r16, 0);
@@ -14351,7 +14351,7 @@ L_0021F1DC:
     // 0x0021F1E4: jal         0x0029DBA0
     // 0x0021F1E8: addu        $a0, $s0, $zero
     ctx->r4 = ADD32(ctx->r16, 0);
-    osSetThreadPri_recomp(rdram, ctx);
+    sp_osSetThreadPri(rdram, ctx);
         goto after_1;
     // 0x0021F1E8: addu        $a0, $s0, $zero
     ctx->r4 = ADD32(ctx->r16, 0);

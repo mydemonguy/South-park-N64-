@@ -40098,7 +40098,7 @@ RECOMP_FUNC void func_00257E98(uint8_t* rdram, recomp_context* ctx) {
     // 0x00257EE8: jal         0x0029DBA0
     // 0x00257EEC: nop
 
-    osSetThreadPri_recomp(rdram, ctx);
+    sp_osSetThreadPri(rdram, ctx);
         goto after_0;
     // 0x00257EEC: nop
 
@@ -43528,7 +43528,7 @@ L_00259128:
     // 0x00259184: jal         0x0029DBA0
     // 0x00259188: nop
 
-    osSetThreadPri_recomp(rdram, ctx);
+    sp_osSetThreadPri(rdram, ctx);
         goto after_1;
     // 0x00259188: nop
 

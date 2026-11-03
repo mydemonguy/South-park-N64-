@@ -230,7 +230,7 @@
       "struct: osSetEventMesg; wrapped so OS_EVENT_PI is honored"
     ],
     "0029DBA0": [
-      "osSetThreadPri",
+      "sp_osSetThreadPri",
       "struct"
     ],
     "0029DC68": [

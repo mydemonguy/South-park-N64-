@@ -5,8 +5,8 @@
 //   [status] 10s gfx=0 audio=0 screen=600 dma=812 vm_pages=37
 //   [status]   [Game] 3 id=3 pri=10 BLOCKED recv mq=0x800E6FC0 (0/8 msgs)
 //
-// Lines go to stderr, which main.cpp forwards to the session log. Every 5 s for the
-// first minute, then every 30 s.
+// Lines go to stderr, which main.cpp forwards to the session log. At 2 s and 5 s, every
+// 5 s to the first minute, then every 30 s; plus a snapshot on quit and backgrounding.
 
 #include <atomic>
 #include <chrono>
@@ -33,6 +33,7 @@ namespace southpark::status {
         std::atomic<uint32_t> audio_buffers{0};
         std::atomic<uint32_t> screen_updates{0};
         std::atomic<uint8_t*> rdram_base{nullptr};
+        std::chrono::steady_clock::time_point start_time;
 
         std::mutex threads_mutex;
         std::vector<const OSThread*> threads;   // host pointers into RDRAM
@@ -98,22 +99,33 @@ namespace southpark::status {
         threads.push_back(t);
     }
 
+    // An immediate report (on quit / backgrounding), so a short run still shows threads.
+    void report_now(const char* why) {
+        uint8_t* rdram = rdram_base.load();
+        if (rdram == nullptr || exited.load()) {
+            return;
+        }
+        std::fprintf(stderr, "[status] snapshot: %s\n", why);
+        report(rdram, (long)std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - start_time).count());
+    }
+
     // Call once from the game's entry point.
     void start(uint8_t* rdram) {
+        start_time = std::chrono::steady_clock::now();
         if (rdram_base.exchange(rdram) != nullptr) {
             return;
         }
         std::thread([rdram]() {
             using namespace std::chrono;
-            const auto t0 = steady_clock::now();
-            long next = 5;
+            const auto t0 = start_time;
+            long next = 2;
             while (!exited.load()) {
                 std::this_thread::sleep_for(milliseconds(250));
                 const long s = (long)duration_cast<seconds>(steady_clock::now() - t0).count();
                 if (s < next) continue;
                 if (exited.load()) break;
                 report(rdram, s);
-                next = s < 60 ? s + 5 : s + 30;
+                next = s < 5 ? 5 : s < 60 ? s + 5 : s + 30;
             }
         }).detach();
     }
