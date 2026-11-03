@@ -1,5 +1,5 @@
 diff --git a/src/hle/rt64_interpreter.cpp b/src/hle/rt64_interpreter.cpp
-index dccaa87..6028990 100644
+index dccaa87..ddae44d 100644
 --- a/src/hle/rt64_interpreter.cpp
 +++ b/src/hle/rt64_interpreter.cpp
 @@ -2,6 +2,8 @@
@@ -11,7 +11,7 @@ index dccaa87..6028990 100644
  #include "rt64_interpreter.h"
  
  #include <cassert>
-@@ -165,12 +167,36 @@ namespace RT64 {
+@@ -165,12 +167,52 @@ namespace RT64 {
          // Check RDRAM if required.
          state->checkRDRAM();
  
@@ -26,6 +26,11 @@ index dccaa87..6028990 100644
 +        uint32_t colors[12] = {};           // (value, opcode) pairs
 +        uint32_t colorCount = 0;
 +        uint32_t commandCount = 0;
++        uint32_t textureAddresses[12] = {};   // distinct G_SETTIMG addresses
++        uint32_t textureAddressCount = 0;
++        uint32_t colorImages[6] = {};         // G_SETCIMG in order
++        uint32_t colorImageCount = 0;
++        uint32_t texRectsPerImage[6] = {};
 +
          // Run the command interpreter.
          DisplayList *dl = dlStart;
@@ -41,6 +46,17 @@ index dccaa87..6028990 100644
 +                    colors[colorCount++] = dl->w1;   // value
 +                    colors[colorCount++] = opCode;   // which colour
 +                }
++                if (opCode == 0xFD) {   // G_SETTIMG
++                    bool known = false;
++                    for (uint32_t i = 0; i < textureAddressCount; i++) { known |= (textureAddresses[i] == dl->w1); }
++                    if (!known && (textureAddressCount < 12)) { textureAddresses[textureAddressCount++] = dl->w1; }
++                }
++                if ((opCode == 0xFF) && (colorImageCount < 6)) {   // G_SETCIMG
++                    colorImages[colorImageCount++] = dl->w1;
++                }
++                if (((opCode == 0xE4) || (opCode == 0xE5)) && (colorImageCount > 0)) {   // G_TEXRECT(FLIP)
++                    texRectsPerImage[colorImageCount - 1]++;
++                }
 +                if (!((extendedOpCode != 0) && (opCode == extendedOpCode)) && (hleGBI->map[opCode] == nullptr)) {
 +                    unhandled[opCode]++;
 +                }
@@ -48,7 +64,7 @@ index dccaa87..6028990 100644
  
              if ((extendedOpCode != 0) && (opCode == extendedOpCode)) {
                  extendedFunction(state, &dl);
-@@ -195,6 +221,25 @@ namespace RT64 {
+@@ -195,6 +237,37 @@ namespace RT64 {
              }
          }
  
@@ -69,6 +85,18 @@ index dccaa87..6028990 100644
 +                line += buf;
 +            }
 +            fprintf(stderr, "[rt64] display list #%u colours:%s\n", listIndex, line.empty() ? " (none set)" : line.c_str());
++            line.clear();
++            for (uint32_t i = 0; i < colorImageCount; i++) {
++                snprintf(buf, sizeof(buf), " %08X(%u texrects)", colorImages[i], texRectsPerImage[i]);
++                line += buf;
++            }
++            fprintf(stderr, "[rt64] display list #%u renders to:%s\n", listIndex, line.empty() ? " (no SETCIMG)" : line.c_str());
++            line.clear();
++            for (uint32_t i = 0; i < textureAddressCount; i++) {
++                snprintf(buf, sizeof(buf), " %08X", textureAddresses[i]);
++                line += buf;
++            }
++            fprintf(stderr, "[rt64] display list #%u texture addresses (first %u distinct):%s\n", listIndex, textureAddressCount, line.c_str());
 +        }
 +
          state->dlCpuProfiler.end();
