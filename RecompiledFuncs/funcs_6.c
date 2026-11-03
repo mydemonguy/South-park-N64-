@@ -40515,6 +40515,7 @@ L_00258118:
 RECOMP_FUNC void func_00258134(uint8_t* rdram, recomp_context* ctx) {
     uint64_t hi = 0, lo = 0, result = 0;
     int c1cs = 0;
+    if (southpark_sched_guard(rdram, ctx, 0)) return;
     // 0x00258134: addiu       $sp, $sp, -0x30
     ctx->r29 = ADD32(ctx->r29, -0X30);
     // 0x00258138: sw          $s3, 0x24($sp)
@@ -41406,6 +41407,7 @@ L_002585FC:
 RECOMP_FUNC void func_00258618(uint8_t* rdram, recomp_context* ctx) {
     uint64_t hi = 0, lo = 0, result = 0;
     int c1cs = 0;
+    if (southpark_sched_guard(rdram, ctx, 1)) return;
     // 0x00258618: addiu       $sp, $sp, -0x30
     ctx->r29 = ADD32(ctx->r29, -0X30);
     // 0x0025861C: sw          $s4, 0x28($sp)
@@ -43115,6 +43117,7 @@ L_00258F34:
 RECOMP_FUNC void func_00258F40(uint8_t* rdram, recomp_context* ctx) {
     uint64_t hi = 0, lo = 0, result = 0;
     int c1cs = 0;
+    southpark_sched_trace(rdram, ctx);
     // 0x00258F40: addiu       $sp, $sp, -0x28
     ctx->r29 = ADD32(ctx->r29, -0X28);
     // 0x00258F44: sw          $s3, 0x1C($sp)

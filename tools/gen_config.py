@@ -102,6 +102,20 @@ text = "southpark_vm_region_changed(rdram, (uint32_t)ctx->r8, 0);"
 func = "func_00290EAC"
 before_vram = 0x00290F10
 text = "southpark_vm_region_changed(rdram, (uint32_t)ctx->r16, 1);"
+
+# Scheduler: __scHandleRSP / __scHandleRDP dereference sc->curRSPTask / curRDPTask
+# unchecked; ignore (and log) a done message that arrives with no task running.
+[[patches.hook]]
+func = "func_00258134"
+text = "if (southpark_sched_guard(rdram, ctx, 0)) return;"
+
+[[patches.hook]]
+func = "func_00258618"
+text = "if (southpark_sched_guard(rdram, ctx, 1)) return;"
+
+[[patches.hook]]
+func = "func_00258F40"
+text = "southpark_sched_trace(rdram, ctx);"
 """
 open(config_path, "w").write(out)
 print(f"{len(set(custom))} custom (ignored), {len(set(stubs))} stubbed")

@@ -44,4 +44,14 @@ extern "C"
 #endif
 void southpark_vm_region_changed(uint8_t* rdram, uint32_t node, int freed);
 
+// Scheduler RSP/RDP-done guard (southpark.us.toml [[patches.hook]], src/game/southpark_os.cpp).
+#ifdef __cplusplus
+extern "C"
+#endif
+int southpark_sched_guard(uint8_t* rdram, recomp_context* ctx, int which);
+#ifdef __cplusplus
+extern "C"
+#endif
+void southpark_sched_trace(uint8_t* rdram, recomp_context* ctx);
+
 #endif

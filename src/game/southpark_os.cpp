@@ -585,6 +585,48 @@ extern "C" void sp_osSetThreadPri(uint8_t* rdram, recomp_context* ctx) {
     ultramodern::check_running_queue(PASS_RDRAM1);
 }
 
+// Hook (southpark.us.toml) at the start of the scheduler's __scHandleRSP (func_00258134,
+// which = 0) and __scHandleRDP (func_00258618, which = 1). Both take sc->curRSPTask
+// (sc+0x2F4) / sc->curRDPTask (sc+0x2F8) and dereference it unchecked. On hardware an
+// RSP/RDP-done interrupt only comes for a running task; a done message with nothing
+// running here crashed the scheduler (null+4). Skip it, and log the first few with the
+// scheduler state so the source can be found. Returns 1 to skip the handler.
+extern "C" int southpark_sched_guard(uint8_t* rdram, recomp_context* ctx, int which) {
+    const gpr sc = ctx->r4;
+    const uint32_t task = (uint32_t)MEM_W(which ? 0x2F8 : 0x2F4, sc);
+    if (task != 0) {
+        return 0;
+    }
+    static std::atomic<uint32_t> skipped[2]{};
+    const uint32_t n = skipped[which].fetch_add(1);
+    if (n < 8 || (n % 100) == 0) {
+        std::fprintf(stderr, "[sched] %s done with no %s task (#%u): curRSP=0x%08X curRDP=0x%08X "
+                     "audioQ=0x%08X gfxQ=0x%08X doAudio=%d\n",
+                     which ? "RDP" : "RSP", which ? "RDP" : "RSP", n + 1,
+                     (uint32_t)MEM_W(0x2F4, sc), (uint32_t)MEM_W(0x2F8, sc),
+                     (uint32_t)MEM_W(0x2E4, sc), (uint32_t)MEM_W(0x2E8, sc), (int)MEM_W(0x300, sc));
+    }
+    return 1;
+}
+
+// Hook at the start of the scheduler's __scExec(sc, sp, dp) (func_00258F40): log the first
+// task starts, flagging any that would replace an RSP/RDP task still marked as running.
+extern "C" void southpark_sched_trace(uint8_t* rdram, recomp_context* ctx) {
+    static std::atomic<uint32_t> calls{0};
+    const uint32_t n = calls.fetch_add(1);
+    const gpr sc = ctx->r4;
+    const uint32_t sp = (uint32_t)ctx->r5, dp = (uint32_t)ctx->r6;
+    const uint32_t cur_sp = (uint32_t)MEM_W(0x2F4, sc), cur_dp = (uint32_t)MEM_W(0x2F8, sc);
+    const bool overlap = (sp != 0 && cur_sp != 0) || (dp != 0 && dp != sp && cur_dp != 0);
+    if (n < 12 || overlap) {
+        // OSScTask: list (OSTask) at +0x10, its type first.
+        const int sp_type = sp ? (int)MEM_W(0x10, (gpr)(int32_t)sp) : -1;
+        const int dp_type = dp ? (int)MEM_W(0x10, (gpr)(int32_t)dp) : -1;
+        std::fprintf(stderr, "[sched] exec #%u sp=0x%08X(type %d) dp=0x%08X(type %d) curRSP=0x%08X curRDP=0x%08X%s\n",
+                     n + 1, sp, sp_type, dp, dp_type, cur_sp, cur_dp, overlap ? "  <-- still running" : "");
+    }
+}
+
 // For the session-log status lines (src/main/southpark_status.cpp).
 extern "C" uint32_t southpark_dma_count() { return dma_count.load(std::memory_order_relaxed); }
 extern "C" uint32_t southpark_vm_pages_in() { return vm_pages_in.load(std::memory_order_relaxed); }
