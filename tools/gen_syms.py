@@ -245,12 +245,47 @@ def extend(s, funcs):
     return changed
 
 
+def after_return_starts(s, funcs):
+    """Code right after a `jr $ra` and its delay slot that nothing in its function branches
+    to can only be entered from outside: small functions that live in a callback table
+    (e.g. 0x004050C0 and 0x004050CC after func_00405040's return, or the ~20 option
+    getters/setters packed into func_00405788) that spimdisasm merged into the function
+    before them. Make each one a function start (overlapping the rest of its host), unless
+    its body branches back to before its start (then it is a loop of the host)."""
+    added = 0
+    for a, size in sorted(funcs.items()):
+        end = a + size
+        targets = set()
+        for v in range(a, end, 4):
+            ins = s.insn(v)
+            if ins.isBranch() or ins.isJumpWithAddress():
+                targets.add(ins.getBranchVramGeneric())
+        for v in range(a + 8, end, 4):
+            if v in funcs or v in targets or s.word(v) == 0 or not s.insn(v - 8).isJrRa():
+                continue
+            loops_back = False
+            for w in range(v, end, 4):
+                ins = s.insn(w)
+                if (ins.isBranch() or ins.isJumpWithAddress()) and ins.getBranchVramGeneric() < v:
+                    loops_back = True
+                    break
+                if ins.isJrRa():
+                    break
+            if not loops_back:
+                funcs[v] = end - v
+                added += 1
+    return added
+
+
 def build(s, funcs):
     # Drop constants first so they don't get merged into neighbors.
     dropped = [a for a, l in funcs.items() if l == 4 and is_embedded_constant(s, a)]
     for a in dropped:
         del funcs[a]
     changed = extend(s, funcs)
+    after_return = after_return_starts(s, funcs)
+    if after_return:
+        print(f'{s.sec["name"]}: {after_return} functions split after a return')
     return dropped, changed
 
 

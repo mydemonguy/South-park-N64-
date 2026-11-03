@@ -458,10 +458,15 @@ void goemon64::renderer::RT64Context::update_screen() {
         // blank, and VI_ORIGIN must point into the framebuffer the game renders to.
         static ultramodern::renderer::ViRegs last{};
         static int changes = 0;
+        // Only once the game runs (the runtime's own boot defaults are not interesting),
+        // and a change of the origin alone is just the game swapping buffers.
         ultramodern::renderer::ViRegs now = *ultramodern::renderer::get_vi_regs();
-        now.VI_V_CURRENT_LINE_REG = 0;   // changes every frame; not interesting here
+        now.VI_V_CURRENT_LINE_REG = 0;   // changes every frame
         const ultramodern::renderer::ViRegs* r = &now;
-        if (changes < 12 && std::memcmp(&last, r, sizeof(last)) != 0) {
+        ultramodern::renderer::ViRegs cmp_now = now, cmp_last = last;
+        cmp_now.VI_ORIGIN_REG = 0;
+        cmp_last.VI_ORIGIN_REG = 0;
+        if (ultramodern::is_game_started() && changes < 12 && std::memcmp(&cmp_last, &cmp_now, sizeof(cmp_now)) != 0) {
             changes++;
             last = now;
             fprintf(stderr, "[vi] status=0x%X origin=0x%06X width=%u x_scale=0x%X y_scale=0x%X h_start=0x%X v_start=0x%X\n",
