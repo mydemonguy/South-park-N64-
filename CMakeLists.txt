@@ -120,6 +120,27 @@ if (ANDROID)
     endif()
 endif()
 
+# Local fixes to the rt64 submodule, applied at configure time (tools/patches/rt64/*.patch,
+# made with `git diff` inside lib/rt64). Each is applied only if not already applied, so
+# reconfiguring is safe; a patch that no longer fits stops the build.
+find_package(Git REQUIRED)
+file(GLOB RT64_LOCAL_PATCHES ${CMAKE_SOURCE_DIR}/tools/patches/rt64/*.patch)
+list(SORT RT64_LOCAL_PATCHES)
+foreach(rt64_patch ${RT64_LOCAL_PATCHES})
+    execute_process(COMMAND ${GIT_EXECUTABLE} apply --reverse --check ${rt64_patch}
+                    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/lib/rt64
+                    RESULT_VARIABLE rt64_patch_applied OUTPUT_QUIET ERROR_QUIET)
+    if(NOT rt64_patch_applied EQUAL 0)
+        execute_process(COMMAND ${GIT_EXECUTABLE} apply ${rt64_patch}
+                        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/lib/rt64
+                        RESULT_VARIABLE rt64_patch_result)
+        if(NOT rt64_patch_result EQUAL 0)
+            message(FATAL_ERROR "Failed to apply ${rt64_patch} to lib/rt64")
+        endif()
+        message(STATUS "Applied rt64 patch ${rt64_patch}")
+    endif()
+endforeach()
+
 add_subdirectory(${CMAKE_SOURCE_DIR}/lib/rt64 ${CMAKE_BINARY_DIR}/rt64)
 
 # set(BUILD_SHARED_LIBS_SAVED "${BUILD_SHARED_LIBS}")
