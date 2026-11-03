@@ -31,6 +31,7 @@ namespace southpark::status {
     namespace {
         std::atomic<uint32_t> gfx_tasks{0};
         std::atomic<uint32_t> audio_buffers{0};
+        std::atomic<uint64_t> audio_frames{0};     // stereo sample pairs queued
         std::atomic<uint32_t> screen_updates{0};
         std::atomic<uint8_t*> rdram_base{nullptr};
         std::chrono::steady_clock::time_point start_time;
@@ -49,8 +50,10 @@ namespace southpark::status {
         }
 
         void report(uint8_t* rdram, long seconds) {
-            std::fprintf(stderr, "[status] %lds gfx=%u audio=%u screen=%u dma=%u vm_pages=%u\n",
-                         seconds, gfx_tasks.load(), audio_buffers.load(), screen_updates.load(),
+            const uint64_t frames = audio_frames.load();
+            std::fprintf(stderr, "[status] %lds gfx=%u audio=%u (%llu Hz avg) screen=%u dma=%u vm_pages=%u\n",
+                         seconds, gfx_tasks.load(), audio_buffers.load(),
+                         (unsigned long long)(seconds > 0 ? frames / (uint64_t)seconds : 0), screen_updates.load(),
                          southpark_dma_count(), southpark_vm_pages_in());
             // Copy the list and name threads without holding the lock: the naming
             // callback registers threads itself (register_thread takes the lock).
@@ -87,7 +90,10 @@ namespace southpark::status {
     }
 
     void count_gfx_task() { gfx_tasks.fetch_add(1, std::memory_order_relaxed); }
-    void count_audio_buffer() { audio_buffers.fetch_add(1, std::memory_order_relaxed); }
+    void count_audio_buffer(size_t samples) {
+        audio_buffers.fetch_add(1, std::memory_order_relaxed);
+        audio_frames.fetch_add(samples / 2, std::memory_order_relaxed);   // 2 channels
+    }
     void count_screen_update() { screen_updates.fetch_add(1, std::memory_order_relaxed); }
 
     // From get_game_thread_name(), which the runtime calls once for every game thread.

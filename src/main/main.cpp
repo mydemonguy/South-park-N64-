@@ -226,10 +226,10 @@ static uint32_t discarded_output_frames;
 
 constexpr uint32_t bytes_per_frame = input_channels * sizeof(float);
 
-namespace southpark::status { void count_audio_buffer(); void start(uint8_t* rdram); }
+namespace southpark::status { void count_audio_buffer(size_t samples); void start(uint8_t* rdram); }
 
 void queue_samples(int16_t* audio_data, size_t sample_count) {
-    southpark::status::count_audio_buffer();
+    southpark::status::count_audio_buffer(sample_count);
     // Buffer for holding the output of swapping the audio channels. This is reused across
     // calls to reduce runtime allocations.
     static std::vector<float> swap_buffer;
@@ -338,6 +338,10 @@ void update_audio_converter() {
 }
 
 void set_frequency(uint32_t freq) {
+    static int logged = 0;
+    if (logged++ < 4) {
+        fprintf(stderr, "[audio] game sample rate %u Hz (output device %u Hz)\n", freq, output_sample_rate);
+    }
     sample_rate = freq;
 
     update_audio_converter();
@@ -450,7 +454,6 @@ std::vector<recomp::GameEntry> supported_games = {
 // TODO: move somewhere else
 namespace southpark::status {
     void register_thread(const OSThread* t);
-    void count_audio_buffer();
     void start(uint8_t* rdram);
 }
 

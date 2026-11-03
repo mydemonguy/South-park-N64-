@@ -678,6 +678,11 @@ extern "C" void sp_osAiGetStatus(uint8_t* rdram, recomp_context* ctx) {
     constexpr uint32_t AI_STATUS_FIFO_FULL = 0x80000000u;
     const uint32_t frame_samples = (uint32_t)MEM_HU(0x7762, (gpr)(int32_t)0x800E0000);
     const uint32_t frame_bytes = (frame_samples != 0 ? frame_samples : 0x200) * 4;
+    static uint32_t logged_samples = 0xFFFFFFFFu;
+    if (frame_samples != logged_samples) {
+        logged_samples = frame_samples;
+        std::fprintf(stderr, "[audio] game audio frame: %u samples\n", frame_samples);
+    }
     const uint32_t buffered = ultramodern::get_remaining_audio_bytes();
     ctx->r2 = (gpr)(int32_t)((buffered >= 3 * frame_bytes) ? AI_STATUS_FIFO_FULL : 0);
 }
