@@ -2424,7 +2424,6 @@ static FuncEntry section_1_main_funcs[] = {
     { .func = func_0029A6EC, .offset = 0x0009A1C4, .rom_size = 0x00000010 },
     { .func = func_0029A6F0, .offset = 0x0009A1C8, .rom_size = 0x0000000C },
     { .func = func_0029A6FC, .offset = 0x0009A1D4, .rom_size = 0x00000018 },
-    { .func = osAiGetLength_recomp, .offset = 0x0009A1D8, .rom_size = 0x00000000 },
     { .func = func_0029A714, .offset = 0x0009A1EC, .rom_size = 0x0000011C },
     { .func = osAiSetFrequency_recomp, .offset = 0x0009A1F0, .rom_size = 0x00000000 },
     { .func = osAiSetNextBuffer_recomp, .offset = 0x0009A308, .rom_size = 0x00000000 },

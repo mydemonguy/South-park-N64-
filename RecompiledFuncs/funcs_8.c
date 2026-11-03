@@ -11176,7 +11176,7 @@ L_0026E50C:
     // 0x0026E50C: jal         0x0029A700
     // 0x0026E510: nop
 
-    osAiGetLength_recomp(rdram, ctx);
+    sp_osAiGetStatus(rdram, ctx);
         goto after_2;
     // 0x0026E510: nop
 

@@ -2435,7 +2435,7 @@ functions = [
     { name = "func_0029A6EC", vram = 0x0029A6EC, size = 0x10 },
     { name = "func_0029A6F0", vram = 0x0029A6F0, size = 0xC },
     { name = "func_0029A6FC", vram = 0x0029A6FC, size = 0x18 },
-    { name = "osAiGetLength", vram = 0x0029A700, size = 0x14 },
+    { name = "sp_osAiGetStatus", vram = 0x0029A700, size = 0x14 },
     { name = "func_0029A714", vram = 0x0029A714, size = 0x11C },
     { name = "osAiSetFrequency", vram = 0x0029A718, size = 0x118 },
     { name = "osAiSetNextBuffer", vram = 0x0029A830, size = 0x8C },

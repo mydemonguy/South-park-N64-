@@ -2423,7 +2423,6 @@ void func_0029A570(uint8_t* rdram, recomp_context* ctx);
 void func_0029A6EC(uint8_t* rdram, recomp_context* ctx);
 void func_0029A6F0(uint8_t* rdram, recomp_context* ctx);
 void func_0029A6FC(uint8_t* rdram, recomp_context* ctx);
-void osAiGetLength_recomp(uint8_t* rdram, recomp_context* ctx);
 void func_0029A714(uint8_t* rdram, recomp_context* ctx);
 void osAiSetFrequency_recomp(uint8_t* rdram, recomp_context* ctx);
 void osAiSetNextBuffer_recomp(uint8_t* rdram, recomp_context* ctx);

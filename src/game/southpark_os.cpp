@@ -19,6 +19,7 @@
 //                           handler pages them in instead (southpark_tlb_handle_fault).
 //   * sp_osVirtualToPhysical, task pointers - translate TLB-mapped addresses through the
 //                           game's TLB mappings before they reach the RSP/RDP.
+//   * sp_osAiGetStatus    - AI FIFO-full flag the audio thread's refill loop waits for.
 //   * sp_osSetThreadPri   - the runtime's thread_queue_remove only ever checks the head
 //                           of a queue, so changing the priority of another thread that
 //                           is queued behind others corrupts the queue (see below).
@@ -666,6 +667,21 @@ extern "C" int southpark_sched_guard(uint8_t* rdram, recomp_context* ctx, int wh
 
 // Hook at the start of the scheduler's __scExec(sc, sp, dp) (func_00258F40): log the first
 // task starts, flagging any that would replace an RSP/RDP task still marked as running.
+// AI status read at 0x0029A700 (named osAiGetLength before; see libultra_names.json). The
+// audio thread refills with `while (!(status & AI_STATUS_FIFO_FULL)) make_audio_frame();`
+// (0x0026E50C), so it needs FIFO-full once enough is queued: the runtime's osAiGetLength
+// never sets bit 31 and its osAiGetStatus always returns 0, so the game generated audio
+// as fast as tasks completed (~40 frames per retrace: garbled sound). Report full once
+// three of the game's own audio frames (samples per frame at 0x800E7762, 4 bytes each)
+// are buffered: the hardware FIFO holds two, plus margin for the host audio thread.
+extern "C" void sp_osAiGetStatus(uint8_t* rdram, recomp_context* ctx) {
+    constexpr uint32_t AI_STATUS_FIFO_FULL = 0x80000000u;
+    const uint32_t frame_samples = (uint32_t)MEM_HU(0x7762, (gpr)(int32_t)0x800E0000);
+    const uint32_t frame_bytes = (frame_samples != 0 ? frame_samples : 0x200) * 4;
+    const uint32_t buffered = ultramodern::get_remaining_audio_bytes();
+    ctx->r2 = (gpr)(int32_t)((buffered >= 3 * frame_bytes) ? AI_STATUS_FIFO_FULL : 0);
+}
+
 // osViSwapBuffer(void* framebuffer): the runtime converts the pointer with its own
 // TLB-unaware osVirtualToPhysical, so translate a TLB-mapped framebuffer first.
 extern "C" void osViSwapBuffer_recomp(uint8_t* rdram, recomp_context* ctx);

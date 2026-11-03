@@ -1,0 +1,30 @@
+diff --git a/src/hle/rt64_rdp.cpp b/src/hle/rt64_rdp.cpp
+index 91573db..16dfb8d 100644
+--- a/src/hle/rt64_rdp.cpp
++++ b/src/hle/rt64_rdp.cpp
+@@ -255,6 +255,25 @@ namespace RT64 {
+     }
+ 
+     void RDP::setColorImage(uint8_t fmt, uint8_t siz, uint16_t width, uint32_t address) {
++        // South Park 64 diagnostics: the distinct render targets a game draws to, to match
++        // against the VI origin when the screen stays black.
++        {
++            static uint32_t seen[16][3] = {};
++            static int seenCount = 0;
++            const uint32_t masked = maskAddress(address);
++            bool known = false;
++            for (int i = 0; i < seenCount; i++) {
++                known |= (seen[i][0] == masked) && (seen[i][1] == width) && (seen[i][2] == (uint32_t(fmt) << 8 | siz));
++            }
++            if (!known && (seenCount < 16)) {
++                seen[seenCount][0] = masked;
++                seen[seenCount][1] = width;
++                seen[seenCount][2] = uint32_t(fmt) << 8 | siz;
++                seenCount++;
++                fprintf(stderr, "[rt64] color image #%d: address=0x%06X width=%u fmt=%u siz=%u\n",
++                    seenCount, unsigned(masked), unsigned(width), unsigned(fmt), unsigned(siz));
++            }
++        }
+         // Make sure the new color image is actually different. Some games will set the color image
+         // multiple times despite setting the exact same parameters.
+         const uint32_t newAddress = maskAddress(address);

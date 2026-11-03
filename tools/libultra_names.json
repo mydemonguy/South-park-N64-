@@ -14,8 +14,8 @@
       "sig osUnmapTLB; South Park implementation"
     ],
     "0029A700": [
-      "osAiGetLength",
-      "struct: reads AI_LEN_REG"
+      "sp_osAiGetStatus",
+      "struct: one AI register read; its only caller (audio thread 0x0026E50C) tests bit 31 = AI_STATUS_FIFO_FULL, so used as osAiGetStatus"
     ],
     "0029A718": [
       "osAiSetFrequency",

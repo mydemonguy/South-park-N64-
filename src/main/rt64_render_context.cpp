@@ -452,6 +452,23 @@ void goemon64::renderer::RT64Context::send_dl(const OSTask* task) {
 
 void goemon64::renderer::RT64Context::update_screen() {
     southpark::status::count_screen_update();
+    {
+        // Log the VI registers the renderer presents from, on each change (first 12), so a
+        // black screen can be told apart from "nothing drawn": a VI_STATUS type of 0 is
+        // blank, and VI_ORIGIN must point into the framebuffer the game renders to.
+        static ultramodern::renderer::ViRegs last{};
+        static int changes = 0;
+        ultramodern::renderer::ViRegs now = *ultramodern::renderer::get_vi_regs();
+        now.VI_V_CURRENT_LINE_REG = 0;   // changes every frame; not interesting here
+        const ultramodern::renderer::ViRegs* r = &now;
+        if (changes < 12 && std::memcmp(&last, r, sizeof(last)) != 0) {
+            changes++;
+            last = now;
+            fprintf(stderr, "[vi] status=0x%X origin=0x%06X width=%u x_scale=0x%X y_scale=0x%X h_start=0x%X v_start=0x%X\n",
+                    r->VI_STATUS_REG, r->VI_ORIGIN_REG, r->VI_WIDTH_REG, r->VI_X_SCALE_REG, r->VI_Y_SCALE_REG,
+                    r->VI_H_START_REG, r->VI_V_START_REG);
+        }
+    }
 #if defined(__ANDROID__)
     // On the gfx thread: if the SDL/main thread published a fresh ANativeWindow
     // on resume, hand it to the swap chain. The present thread rebuilds the

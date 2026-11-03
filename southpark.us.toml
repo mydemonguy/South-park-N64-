@@ -14,6 +14,7 @@ recomp_include = "#include \"sp_recomp.h\""
 ignored = [
     "sp_cart_io_read",
     "sp_cart_io_write",
+    "sp_osAiGetStatus",
     "sp_osMapTLB",
     "sp_osPiRawStartDma",
     "sp_osSetEventMesg",
