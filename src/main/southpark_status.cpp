@@ -23,6 +23,7 @@
 extern std::atomic_bool exited;   // librecomp (recomp.cpp)
 extern "C" uint32_t southpark_dma_count();
 extern "C" uint32_t southpark_vm_pages_in();
+extern "C" void southpark_renderer_timings(char* out, size_t size);
 
 namespace goemon64 {
     std::string get_game_thread_name(const OSThread* t);
@@ -56,6 +57,11 @@ namespace southpark::status {
                          seconds, gfx_tasks.load(), audio_buffers.load(),
                          (unsigned long long)(seconds > 0 ? frames / (uint64_t)seconds : 0), screen_updates.load(),
                          southpark_dma_count(), southpark_vm_pages_in());
+            char timings[192];
+            southpark_renderer_timings(timings, sizeof(timings));
+            if (timings[0] != '\0') {
+                std::fprintf(stderr, "[perf] %s\n", timings);
+            }
             // Copy the list and name threads without holding the lock: the naming
             // callback registers threads itself (register_thread takes the lock).
             std::vector<const OSThread*> snapshot;

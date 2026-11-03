@@ -1,3 +1,5 @@
+#include <atomic>
+#include <cstdio>
 #include <memory>
 #include <cstring>
 #include <variant>
@@ -27,6 +29,9 @@
 #if defined(__ANDROID__)
 #include "goemon_support.h"
 #endif
+
+// Renderer whose timings the status report prints (see southpark_renderer_timings).
+static std::atomic<RT64::Application*> timing_app{nullptr};
 
 static RT64::UserConfiguration::Antialiasing device_max_msaa = RT64::UserConfiguration::Antialiasing::None;
 static bool sample_positions_supported = false;
@@ -237,6 +242,15 @@ void set_application_user_config(RT64::Application* application, const ultramode
     application->userConfig.refreshRate = to_rt64(config.rr_option);
     application->userConfig.refreshRateTarget = config.rr_manual_value;
     application->userConfig.internalColorFormat = to_rt64(config.hpfb_option);
+#if defined(__ANDROID__)
+    // Auto means 16-bit-per-channel colour targets on any GPU with over 512 MB of memory,
+    // i.e. every phone. That doubles the memory traffic of every draw (the limit on mobile
+    // GPUs, especially at 3x and above) for no visible gain in N64 output, so on Android
+    // Auto means standard 8-bit colour. The setting has no menu entry; "On" still forces it.
+    if (config.hpfb_option == ultramodern::renderer::HighPrecisionFramebuffer::Auto) {
+        application->userConfig.internalColorFormat = RT64::UserConfiguration::InternalColorFormat::Standard;
+    }
+#endif
     application->userConfig.displayBuffering = RT64::UserConfiguration::DisplayBuffering::Triple;
 
     // Not part of userConfig: the sites that read this are deep inside command
@@ -436,9 +450,27 @@ goemon64::renderer::RT64Context::RT64Context(uint8_t* rdram, ultramodern::render
     }
 
     high_precision_fb_enabled = app->shaderLibrary->usesHDR;
+    std::fprintf(stderr, "[perf] colour targets: %s\n", high_precision_fb_enabled ? "16-bit per channel (high precision)" : "8-bit per channel");
+    timing_app.store(app.get());
 }
 
-goemon64::renderer::RT64Context::~RT64Context() = default;
+goemon64::renderer::RT64Context::~RT64Context() {
+    timing_app.store(nullptr);
+}
+
+// One line of renderer timings (averages over the last 120 frames, in ms) for the status
+// report: whether the GPU, the display-list parsing on the CPU, or neither is the limit.
+extern "C" void southpark_renderer_timings(char* out, size_t size) {
+    RT64::Application* a = timing_app.load();
+    if ((a == nullptr) || (size == 0)) {
+        if (size > 0) out[0] = '\0';
+        return;
+    }
+    std::snprintf(out, size, "gpu=%.1fms per frame, renderer cpu=%.1fms, display-list parse=%.1fms, frame interval=%.1fms, %.1fx",
+        a->workloadQueue->rendererGPUProfiler.average(), a->workloadQueue->workloadProfiler.average(),
+        a->state->dlCpuProfiler.average(), a->presentQueue->presentProfiler.average(),
+        double(a->userConfig.resolutionMultiplier));
+}
 
 namespace southpark::status { void count_gfx_task(); void count_screen_update(); }
 
