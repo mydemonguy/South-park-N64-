@@ -1,0 +1,34 @@
+diff --git a/src/render/rt64_render_target.cpp b/src/render/rt64_render_target.cpp
+index 81917bc..2312a05 100644
+--- a/src/render/rt64_render_target.cpp
++++ b/src/render/rt64_render_target.cpp
+@@ -5,6 +5,9 @@
+ #include "rt64_render_target.h"
+ 
+ #include <algorithm>
++#include <cstdio>
++
++#include "common/rt64_device_workarounds.h"
+ 
+ #include "gbi/rt64_f3d.h"
+ #include "shared/rt64_fb_common.h"
+@@ -249,6 +252,19 @@ namespace RT64 {
+         assert(worker != nullptr);
+         assert(fbChange.used);
+ 
++        // The change textures are filled only by NativeTarget::copyFromRAM's dispatch, which the
++        // framebuffer sync workaround skips. Drawing them anyway reads never-written images: on
++        // Qualcomm's proprietary Adreno driver that lost the GPU device (GPU breadcrumbs: the
++        // fbChangesDrawColor render pass was running), and elsewhere it draws garbage pixels.
++        if (!GetFramebufferSyncEnabled()) {
++            static bool logged = false;
++            if (!logged) {
++                logged = true;
++                fprintf(stderr, "[rt64] framebuffer sync off: skipping framebuffer change draws (their data is never loaded)\n");
++            }
++            return;
++        }
++
+         // Select shader based on the formats.
+         RenderTextureLayout requiredTextureLayout = RenderTextureLayout::UNKNOWN;
+         const ShaderRecord *shaderRecord = nullptr;
