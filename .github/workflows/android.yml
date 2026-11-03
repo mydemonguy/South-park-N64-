@@ -123,8 +123,11 @@ jobs:
           apk=$(ls android/app/build/outputs/apk/debug/*.apk | head -1)
           cp "$apk" SouthPark64-debug.apk
           notes="Debug APK built from ${GITHUB_SHA::7}. arm64 (Android 9+). Needs your own South Park (USA) .z64 ROM; the app contains no game data. Work in progress: the game is not confirmed to boot yet."
+          so=$(ls android/app/build/intermediates/cxx/*/*/obj/arm64-v8a/libGoemon64.so 2>/dev/null | head -1)
+          if [ -n "$so" ]; then gzip -c "$so" > libGoemon64-symbols.so.gz; fi
           if gh release view latest >/dev/null 2>&1; then
             gh release upload latest SouthPark64-debug.apk --clobber
+            if [ -f libGoemon64-symbols.so.gz ]; then gh release upload latest libGoemon64-symbols.so.gz --clobber; fi
             gh release edit latest --notes "$notes" --title "Latest build (${GITHUB_SHA::7})"
           else
             gh release create latest SouthPark64-debug.apk --prerelease \
