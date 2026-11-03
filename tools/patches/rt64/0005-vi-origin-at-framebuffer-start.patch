@@ -1,0 +1,121 @@
+diff --git a/src/hle/rt64_present_queue.cpp b/src/hle/rt64_present_queue.cpp
+index 1d41696..e7a1962 100644
+--- a/src/hle/rt64_present_queue.cpp
++++ b/src/hle/rt64_present_queue.cpp
+@@ -4,6 +4,8 @@
+ 
+ #include "rt64_present_queue.h"
+ 
++#include <cstdio>
++
+ #include "common/rt64_thread.h"
+ #include "rhi/rt64_render_hooks.h"
+ 
+@@ -145,6 +147,24 @@ namespace RT64 {
+             }
+ 
+             Framebuffer *presentFb = viFb;
++
++            // South Park 64 diagnostics: report which framebuffer the VI is shown from, whenever it changes.
++            {
++                static uint32_t lastAddress = 0xFFFFFFFFU;
++                static bool lastFound = false;
++                static int reports = 0;
++                const uint32_t address = present.screenVI.fbAddress();
++                const bool found = (viFb != nullptr);
++                if (((address != lastAddress) || (found != lastFound)) && (reports < 24)) {
++                    reports++;
++                    const hlslpp::uint2 size = present.screenVI.fbSize();
++                    fprintf(stderr, "[rt64] present: origin=0x%06X fb=0x%06X %ux%u siz=%u -> %s\n",
++                        unsigned(present.screenVI.origin), unsigned(address), unsigned(size.x), unsigned(size.y), unsigned(present.screenVI.fbSiz()),
++                        found ? "GPU framebuffer" : (viewRDRAM ? "RDRAM (view RDRAM)" : "RDRAM fallback (no framebuffer at that address)"));
++                    lastAddress = address;
++                    lastFound = found;
++                }
++            }
+             
+             // Show the framebuffer the debugger has requested instead.
+             if (present.debuggerFramebuffer.view) {
+diff --git a/src/hle/rt64_state.cpp b/src/hle/rt64_state.cpp
+index f9f0ad8..07bc4e1 100644
+--- a/src/hle/rt64_state.cpp
++++ b/src/hle/rt64_state.cpp
+@@ -6,6 +6,7 @@
+ 
+ #include <cassert>
+ #include <cinttypes>
++#include <cstdio>
+ 
+ #include "im3d/im3d.h"
+ #include "im3d/im3d_math.h"
+@@ -1839,6 +1840,22 @@ namespace RT64 {
+         present.storage.clear();
+ 
+         const bool presentEarly = !ext.presentQueue->viewRDRAM && (ext.enhancementConfig->presentation.mode == EnhancementConfiguration::Presentation::Mode::PresentEarly);
++
++        // Some games point the VI origin exactly at the start of the framebuffer. If the usual
++        // estimate (origin minus one or two rows) matches nothing but the origin itself is a
++        // framebuffer that was rendered to with the same width and size, use the origin as is.
++        if (!VI::originIsFramebufferStart.load(std::memory_order_relaxed) && newVI.visible() && (newVI.fbSiz() >= G_IM_SIZ_16b)) {
++            const uint32_t estimate = newVI.fbAddressEstimate();
++            const Framebuffer *originFb = framebufferManager.find(newVI.origin);
++            if ((estimate != newVI.origin) && (framebufferManager.find(estimate) == nullptr) && (originFb != nullptr) &&
++                (originFb->width == newVI.fbSize().x) && (originFb->siz == newVI.fbSiz()))
++            {
++                VI::originIsFramebufferStart.store(true, std::memory_order_relaxed);
++                fprintf(stderr, "[rt64] VI origin 0x%06X is a framebuffer start (estimate 0x%06X had none); presenting from the origin\n",
++                    unsigned(newVI.origin), unsigned(estimate));
++            }
++        }
++
+         const uint32_t screenFbAddress = newVI.fbAddress();
+         const hlslpp::uint2 screenFbSize = newVI.fbSize();
+         const uint8_t screenFbSiz = newVI.fbSiz();
+diff --git a/src/hle/rt64_vi.cpp b/src/hle/rt64_vi.cpp
+index a870166..bb32b5a 100644
+--- a/src/hle/rt64_vi.cpp
++++ b/src/hle/rt64_vi.cpp
+@@ -75,7 +75,17 @@ namespace RT64 {
+         }
+     }
+ 
++    std::atomic<bool> VI::originIsFramebufferStart(false);
++
+     uint32_t VI::fbAddress() const {
++        if (originIsFramebufferStart.load(std::memory_order_relaxed)) {
++            return origin;
++        }
++
++        return fbAddressEstimate();
++    }
++
++    uint32_t VI::fbAddressEstimate() const {
+         uint8_t siz = fbSiz();
+ 
+         // Estimate the origin is off by one or two rows.
+diff --git a/src/hle/rt64_vi.h b/src/hle/rt64_vi.h
+index 5b70e01..c15bcc0 100644
+--- a/src/hle/rt64_vi.h
++++ b/src/hle/rt64_vi.h
+@@ -5,6 +5,7 @@
+ #pragma once
+ 
+ #include <array>
++#include <atomic>
+ #include <stdint.h>
+ 
+ #include "common/rt64_common.h"
+@@ -138,8 +139,13 @@ namespace RT64 {
+         XTransform xTransform;
+         YTransform yTransform;
+ 
++        // Set once a game is seen placing the VI origin exactly at the start of a rendered
++        // framebuffer instead of one or two rows into it (South Park 64 does this).
++        static std::atomic<bool> originIsFramebufferStart;
++
+         uint8_t fbSiz() const;
+         uint32_t fbAddress() const;
++        uint32_t fbAddressEstimate() const;
+         hlslpp::uint2 fbSize() const;
+         float xScaleFloat() const;
+         float xOffsetFloat() const;
