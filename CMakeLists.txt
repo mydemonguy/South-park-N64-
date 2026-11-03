@@ -278,6 +278,7 @@ set (SOURCES
     ${CMAKE_SOURCE_DIR}/src/game/rom_decompression.cpp
     ${CMAKE_SOURCE_DIR}/src/game/unknown_symbols.cpp
     ${CMAKE_SOURCE_DIR}/src/game/southpark_os.cpp
+    ${CMAKE_SOURCE_DIR}/src/main/southpark_status.cpp
 
     ${CMAKE_SOURCE_DIR}/src/ui/ui_renderer.cpp
     ${CMAKE_SOURCE_DIR}/src/ui/ui_state.cpp

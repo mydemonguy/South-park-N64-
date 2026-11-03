@@ -127,6 +127,7 @@ namespace {
     uint64_t vm_paged[vm_max_vpages / 64]{};       // 4 KB pages this file has mapped
     size_t host_page_size = 4096;
     std::atomic<uint32_t> vm_pages_in{0};
+    std::atomic<uint32_t> dma_count{0};   // PI DMAs started (sp_osPiRawStartDma)
 
     struct VmLock {
         VmLock() { while (vm_lock.test_and_set(std::memory_order_acquire)) {} }
@@ -417,7 +418,6 @@ extern "C" void sp_osPiRawStartDma(uint8_t* rdram, recomp_context* ctx) {
     gpr dram = ctx->r6;
     uint32_t size = (uint32_t)ctx->r7;
 
-    static std::atomic<uint32_t> dma_count{0};
     uint32_t nth = dma_count.fetch_add(1);
     if (nth < 48 || (nth % 500) == 0) {
         std::fprintf(stderr, "[southpark] PI DMA #%u dir=%u rom=0x%08X -> 0x%08X size=0x%X\n",
@@ -532,3 +532,7 @@ SP_UNREACHABLE(__osInsertTimer)
 SP_UNREACHABLE(__osSetTimerIntr)
 SP_UNREACHABLE(__osSetCompare)
 SP_UNREACHABLE(__osProbeTLB)
+
+// For the session-log status lines (src/main/southpark_status.cpp).
+extern "C" uint32_t southpark_dma_count() { return dma_count.load(std::memory_order_relaxed); }
+extern "C" uint32_t southpark_vm_pages_in() { return vm_pages_in.load(std::memory_order_relaxed); }

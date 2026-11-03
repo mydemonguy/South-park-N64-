@@ -226,7 +226,10 @@ static uint32_t discarded_output_frames;
 
 constexpr uint32_t bytes_per_frame = input_channels * sizeof(float);
 
+namespace southpark::status { void count_audio_buffer(); void start(uint8_t* rdram); }
+
 void queue_samples(int16_t* audio_data, size_t sample_count) {
+    southpark::status::count_audio_buffer();
     // Buffer for holding the output of swapping the audio channels. This is reused across
     // calls to reduce runtime allocations.
     static std::vector<float> swap_buffer;
@@ -409,6 +412,7 @@ static void southpark_entrypoint(uint8_t* rdram, recomp_context* ctx) {
         southpark_map_boot_tlb(rdram);
     }
     fprintf(stderr, "[southpark] entrypoint: shared RDRAM %s, starting game_boot\n", tlb_ok ? "ok" : "FAILED");
+    southpark::status::start(rdram);
     // Code runs at TLB-mapped addresses; make indirect calls through them resolve.
     goemon64::register_tlb_code_aliases();
     recomp_entrypoint(rdram, ctx);
@@ -440,8 +444,15 @@ std::vector<recomp::GameEntry> supported_games = {
 };
 
 // TODO: move somewhere else
+namespace southpark::status {
+    void register_thread(const OSThread* t);
+    void count_audio_buffer();
+    void start(uint8_t* rdram);
+}
+
 namespace goemon64 {
     std::string get_game_thread_name(const OSThread* t) {
+        southpark::status::register_thread(t);
         std::string name = "[Game] ";
 
         switch (t->id) {

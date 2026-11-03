@@ -440,7 +440,10 @@ goemon64::renderer::RT64Context::RT64Context(uint8_t* rdram, ultramodern::render
 
 goemon64::renderer::RT64Context::~RT64Context() = default;
 
+namespace southpark::status { void count_gfx_task(); void count_screen_update(); }
+
 void goemon64::renderer::RT64Context::send_dl(const OSTask* task) {
+    southpark::status::count_gfx_task();
     check_texture_pack_actions();
     app->state->rsp->reset();
     app->interpreter->loadUCodeGBI(task->t.ucode & 0x3FFFFFF, task->t.ucode_data & 0x3FFFFFF, true);
@@ -448,6 +451,7 @@ void goemon64::renderer::RT64Context::send_dl(const OSTask* task) {
 }
 
 void goemon64::renderer::RT64Context::update_screen() {
+    southpark::status::count_screen_update();
 #if defined(__ANDROID__)
     // On the gfx thread: if the SDL/main thread published a fresh ANativeWindow
     // on resume, hand it to the swap chain. The present thread rebuilds the
