@@ -602,13 +602,17 @@ const recomp::DefaultN64Mappings recomp::default_n64_controller_mappings = {
         {.input_type = (uint32_t)InputType::ControllerAnalog, .input_id = SDL_CONTROLLER_AXIS_RIGHTY + 1},
         {.input_type = (uint32_t)InputType::ControllerDigital, .input_id = SDL_CONTROLLER_BUTTON_DPAD_DOWN},
     },
-    // N64 D-pad is intentionally unbound -- the physical D-pad drives the C-buttons
-    // above. Menu navigation reads the physical D-pad directly via SDL
-    // (ui_state.cpp), so menus are unaffected; the game ignores the N64 D-pad
-    // natively regardless.
+    // The physical D-pad drives the C-buttons above, so the N64 D-pad gets a button
+    // of its own: clicking the left stick. South Park reads the N64 D-pad (any
+    // direction, as a 0xF00 mask in each gadget's handler) to switch the current
+    // gadget between its primary and secondary fire, so it must be reachable. One
+    // direction is enough. Menu navigation reads the physical D-pad directly via SDL
+    // (ui_state.cpp), so menus are unaffected.
     .dpad_left = {},
     .dpad_right = {},
-    .dpad_up = {},
+    .dpad_up = {
+        {.input_type = (uint32_t)InputType::ControllerDigital, .input_id = SDL_CONTROLLER_BUTTON_LEFTSTICK},
+    },
     .dpad_down = {},
     .analog_left = {
         {.input_type = (uint32_t)InputType::ControllerAnalog, .input_id = -(SDL_CONTROLLER_AXIS_LEFTX + 1)},

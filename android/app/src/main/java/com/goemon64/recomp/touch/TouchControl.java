@@ -24,9 +24,9 @@ public enum TouchControl {
     /** Analog stick. Drives an axis pair rather than a button. */
     STICK(Kind.STICK, "", Dir.NONE, Sdl.NONE, Sdl.NONE),
 
-    /** N64 A — jump. The big one on a real pad, so it gets the largest default radius. */
+    /** N64 A. South Park cycles kids and gadgets with it. */
     A(Kind.BUTTON, "A", Dir.NONE, Sdl.BUTTON_A, Sdl.NONE),
-    /** N64 B — attack. */
+    /** N64 B. Also cycles kids and gadgets. */
     B(Kind.BUTTON, "B", Dir.NONE, Sdl.BUTTON_B, Sdl.NONE),
 
     C_UP(Kind.BUTTON, "C", Dir.UP, Sdl.BUTTON_DPAD_UP, Sdl.NONE),
@@ -34,14 +34,35 @@ public enum TouchControl {
     C_DOWN(Kind.BUTTON, "C", Dir.DOWN, Sdl.BUTTON_DPAD_DOWN, Sdl.NONE),
     C_LEFT(Kind.BUTTON, "C", Dir.LEFT, Sdl.BUTTON_DPAD_LEFT, Sdl.NONE),
 
-    /** N64 Z — crouch. An analog trigger in the stock mapping, so it drives an axis. */
+    /** N64 Z — fire. An analog trigger in the stock mapping, so it drives an axis. */
     Z(Kind.SHOULDER, "Z", Dir.NONE, Sdl.NONE, Sdl.AXIS_TRIGGERLEFT),
-    /** N64 L — unbound by this game; kept because mods use it. */
+    /** N64 L. */
     L(Kind.SHOULDER, "L", Dir.NONE, Sdl.BUTTON_LEFTSHOULDER, Sdl.NONE),
-    /** N64 R — camera / Hook Chain. Also an analog trigger in the stock mapping. */
+    /** N64 R — jump in the Turok-engine controls. Also an analog trigger in the stock mapping. */
     R(Kind.SHOULDER, "R", Dir.NONE, Sdl.NONE, Sdl.AXIS_TRIGGERRIGHT),
 
     START(Kind.BUTTON, "START", Dir.NONE, Sdl.BUTTON_START, Sdl.NONE),
+
+    // ---- Shooter layouts only (see TouchLayout.Scheme) ----
+
+    /**
+     * The aiming area: the right side of the screen, minus the buttons on it. A
+     * finger landing anywhere there becomes a stick centred where it landed, so
+     * aiming never needs a thumb to find a small target first.
+     */
+    LOOK(Kind.LOOK, "", Dir.NONE, Sdl.NONE, Sdl.NONE),
+    /**
+     * Z. Also aims while held: dragging off the button moves the view the same way
+     * the aiming area does, so a player can shoot and track a target with one thumb.
+     */
+    FIRE(Kind.BUTTON, "FIRE", Dir.NONE, Sdl.NONE, Sdl.AXIS_TRIGGERLEFT),
+    /** R, which the game's Turok-engine controls use to jump. */
+    JUMP(Kind.BUTTON, "JUMP", Dir.NONE, Sdl.NONE, Sdl.AXIS_TRIGGERRIGHT),
+    /**
+     * The N64 D-pad, which South Park reads as "switch the gadget's primary and
+     * secondary fire". Sent as a left-stick click, its default binding.
+     */
+    ALT(Kind.BUTTON, "ALT", Dir.NONE, Sdl.BUTTON_LEFTSTICK, Sdl.NONE),
 
     /**
      * Opens the recomp's own settings menu — the on-screen stand-in for Select.
@@ -71,6 +92,7 @@ public enum TouchControl {
         public static final int BUTTON_B = 1;
         public static final int BUTTON_BACK = 4;
         public static final int BUTTON_START = 6;
+        public static final int BUTTON_LEFTSTICK = 7;
         public static final int BUTTON_LEFTSHOULDER = 9;
         public static final int BUTTON_DPAD_UP = 11;
         public static final int BUTTON_DPAD_DOWN = 12;
@@ -95,6 +117,8 @@ public enum TouchControl {
         SHOULDER,
         /** Analog stick: a base ring with a knob that follows the finger. */
         STICK,
+        /** A screen region that turns a touch into a stick centred where it landed. */
+        LOOK,
         /** The settings handle: drawn as a hamburger rather than a glyph. */
         MENU
     }

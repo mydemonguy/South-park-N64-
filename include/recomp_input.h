@@ -18,26 +18,26 @@ namespace recomp {
     // First parameter is the enum name, second parameter is the bit field for the input (or 0 if there is no associated one), third is the readable name.
     // TODO refactor this to allow projects to rename these, or get rid of the readable name and leave that up to individual projects to map.
     #define DEFINE_N64_BUTTON_INPUTS() \
-        DEFINE_INPUT(A, 0x8000, "A", "Used to jump, interact with people/things, swim slowly while underwater, select options in menus and attack with right arm while controlling Impact.") \
-        DEFINE_INPUT(B, 0x4000, "B", "Used to attack, pick up and throw objects, dash while underwater, go back in menus and attack with the left arm while controlling Impact.") \
-        DEFINE_INPUT(Z, 0x2000, "Z", "Used to crawl on the ground and to shoot bullets while controlling Impact.") \
-        DEFINE_INPUT(L, 0x0020, "L", "Unused. Mods may use it for additional features.") \
-        DEFINE_INPUT(R, 0x0010, "R", "Used to activate camera control. Hold and press any of the C-Buttons to control the camera.") \
-        DEFINE_INPUT(START, 0x1000, "Start", "Used to pause and start the game.") \
-        DEFINE_INPUT(C_UP, 0x0008, "C Up", "Used for activating the current character's magic ability. When camera control is activated it will zoom in closer. In the closest zoom stage it will allow you to look around in 360 degrees.") \
-        DEFINE_INPUT(C_DOWN, 0x0004, "C Down", "Used for changing the current character. When camera control is activated it will zoom out further.") \
-        DEFINE_INPUT(C_LEFT, 0x0002, "C Left", "Used to change the character's current weapon/item. When camera control is activated it will rotate the camera left.") \
-        DEFINE_INPUT(C_RIGHT, 0x0001, "C Right", "Used to activate the minimap. When camera control is activated it will rotate the right left.") \
-        DEFINE_INPUT(DPAD_UP, 0x0800, "D-Pad Up", "Unused. Mods may use it for additional features.") \
-        DEFINE_INPUT(DPAD_DOWN, 0x0400, "D-Pad Down", "Unused. Mods may use it for additional features.") \
-        DEFINE_INPUT(DPAD_LEFT, 0x0200, "D-Pad Left", "Unused. Mods may use it for additional features.") \
-        DEFINE_INPUT(DPAD_RIGHT, 0x0100, "D-Pad Right", "Unused. Mods may use it for additional features.")
+        DEFINE_INPUT(A, 0x8000, "A", "Cycles through your kids and their gadgets.") \
+        DEFINE_INPUT(B, 0x4000, "B", "Also cycles through your kids and their gadgets.") \
+        DEFINE_INPUT(Z, 0x2000, "Z", "Fires the current gadget.") \
+        DEFINE_INPUT(L, 0x0020, "L", "Its use depends on the controller configuration chosen in the game's options.") \
+        DEFINE_INPUT(R, 0x0010, "R", "Its use depends on the controller configuration chosen in the game's options.") \
+        DEFINE_INPUT(START, 0x1000, "Start", "Pauses the game and opens its menu.") \
+        DEFINE_INPUT(C_UP, 0x0008, "C Up", "With the game's Brown-Eye controls, C-Up and C-Down look up and down and C-Left and C-Right step sideways. With its Turok controls, the C-Buttons move you.") \
+        DEFINE_INPUT(C_DOWN, 0x0004, "C Down", "With the game's Brown-Eye controls, C-Up and C-Down look up and down and C-Left and C-Right step sideways. With its Turok controls, the C-Buttons move you.") \
+        DEFINE_INPUT(C_LEFT, 0x0002, "C Left", "With the game's Brown-Eye controls, C-Up and C-Down look up and down and C-Left and C-Right step sideways. With its Turok controls, the C-Buttons move you.") \
+        DEFINE_INPUT(C_RIGHT, 0x0001, "C Right", "With the game's Brown-Eye controls, C-Up and C-Down look up and down and C-Left and C-Right step sideways. With its Turok controls, the C-Buttons move you.") \
+        DEFINE_INPUT(DPAD_UP, 0x0800, "D-Pad Up", "Any D-Pad direction switches the current gadget between its primary and secondary fire.") \
+        DEFINE_INPUT(DPAD_DOWN, 0x0400, "D-Pad Down", "Any D-Pad direction switches the current gadget between its primary and secondary fire.") \
+        DEFINE_INPUT(DPAD_LEFT, 0x0200, "D-Pad Left", "Any D-Pad direction switches the current gadget between its primary and secondary fire.") \
+        DEFINE_INPUT(DPAD_RIGHT, 0x0100, "D-Pad Right", "Any D-Pad direction switches the current gadget between its primary and secondary fire.")
 
     #define DEFINE_N64_AXIS_INPUTS() \
-        DEFINE_INPUT(Y_AXIS_POS, 0, "Up", "Used to move and for steering while swimming. Used to control the cursor in the cockpit while controlling Impact.") \
-        DEFINE_INPUT(Y_AXIS_NEG, 0, "Down", "Used to move and for steering while swimming. Used to control the cursor in the cockpit while controlling Impact.") \
-        DEFINE_INPUT(X_AXIS_NEG, 0, "Left", "Used to move and for steering while swimming. Used to control the cursor in the cockpit while controlling Impact.") \
-        DEFINE_INPUT(X_AXIS_POS, 0, "Right", "Used to move and for steering while swimming. Used to control the cursor in the cockpit while controlling Impact.") \
+        DEFINE_INPUT(Y_AXIS_POS, 0, "Up", "With the game's Brown-Eye controls this moves and turns. With its Turok controls it aims.") \
+        DEFINE_INPUT(Y_AXIS_NEG, 0, "Down", "With the game's Brown-Eye controls this moves and turns. With its Turok controls it aims.") \
+        DEFINE_INPUT(X_AXIS_NEG, 0, "Left", "With the game's Brown-Eye controls this moves and turns. With its Turok controls it aims.") \
+        DEFINE_INPUT(X_AXIS_POS, 0, "Right", "With the game's Brown-Eye controls this moves and turns. With its Turok controls it aims.") \
 
     #define DEFINE_RECOMP_UI_INPUTS() \
         DEFINE_INPUT(TOGGLE_MENU, 0, "Toggle Menu", "Open or close this configuration menu from in game.") \

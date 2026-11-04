@@ -539,6 +539,23 @@ bool load_controls_config(const std::filesystem::path& path) {
         if (!load_input_device_from_json(config_json, recomp::InputDevice::Controller, "controller")) {
             assign_all_mappings(recomp::InputDevice::Controller, recomp::default_n64_controller_mappings);
         }
+
+        // Controls saved before the N64 D-pad had a default (it was left unbound for
+        // Goemon, which ignores it) have it unbound for good, which leaves South Park's
+        // primary/secondary fire switch unreachable. Give such a config the default.
+        bool dpad_bound = false;
+        for (recomp::GameInput input : { recomp::GameInput::DPAD_UP, recomp::GameInput::DPAD_DOWN,
+                                         recomp::GameInput::DPAD_LEFT, recomp::GameInput::DPAD_RIGHT }) {
+            for (size_t i = 0; i < recomp::bindings_per_input; i++) {
+                if (recomp::get_input_binding(input, i, recomp::InputDevice::Controller).input_type != 0) {
+                    dpad_bound = true;
+                }
+            }
+        }
+        if (!dpad_bound) {
+            assign_mapping(recomp::InputDevice::Controller, recomp::GameInput::DPAD_UP,
+                recomp::default_n64_controller_mappings.dpad_up);
+        }
     }
     catch (const nlohmann::json::exception&) {
         // A malformed binding (wrong-typed/missing input_type/input_id) throws

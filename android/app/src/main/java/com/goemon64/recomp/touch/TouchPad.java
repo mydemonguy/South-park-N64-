@@ -47,17 +47,38 @@ public final class TouchPad {
      */
     private static final float STICK_DEADZONE = 0.06f;
 
+    /**
+     * How far a stick has to be pushed along one axis before it presses the C-Button
+     * (or the pair of them) that axis stands for, when a shooter scheme turns a stick
+     * into C-Buttons. About 22 degrees off an axis still presses only that one, so a
+     * thumb aiming straight ahead does not drift into a sidestep.
+     */
+    private static final float DIGITAL_THRESHOLD = 0.38f;
+
     /** What a single live pointer is currently doing. */
     private static final class Pointer {
         final TouchControl control;
         /** Stick only: current normalised offset from the base, in [-1, 1]. */
         float stickX;
         float stickY;
+        /** Stick only: the same offset before the response curve, for C-Button use. */
+        float rawX;
+        float rawY;
+        /** Aiming (LOOK and FIRE): where the finger landed, the aim stick's centre. */
+        final float originX;
+        final float originY;
         /** Buttons only: cleared when the finger drifts past RELEASE_SLOP. */
         boolean holding = true;
 
-        Pointer(TouchControl control) {
+        Pointer(TouchControl control, float originX, float originY) {
             this.control = control;
+            this.originX = originX;
+            this.originY = originY;
+        }
+
+        /** Whether this pointer aims. */
+        boolean aims() {
+            return control == TouchControl.LOOK || control == TouchControl.FIRE;
         }
     }
 
@@ -82,8 +103,15 @@ public final class TouchPad {
     /** Cached resolved geometry, smallest control first — see {@link #controlAt}. */
     private List<TouchLayout.Geometry> resolved = new ArrayList<>();
 
+    /** See {@link TouchLayout#lookRadius}. */
+    private float lookRadius = 1f;
+
     private int buttonMask;
     private final float[] axes = new float[TouchControl.Sdl.AXIS_COUNT];
+
+    /** The move stick's deflection, for drawing its knob whatever it is routed to. */
+    private float moveKnobX;
+    private float moveKnobY;
 
     /** Set for one poll after the mask gains a bit, so the view can buzz. */
     private boolean pressedThisEvent;
@@ -155,6 +183,8 @@ public final class TouchPad {
         }
         list.sort((a, b) -> Float.compare(a.rx * a.ry, b.rx * b.ry));
         resolved = list;
+        lookRadius = Math.max(1f, layout.lookRadius(width, height,
+                insetLeft, insetTop, insetRight, insetBottom));
     }
 
     /** Resolved geometry for drawing, in hit-test order. */
@@ -195,7 +225,7 @@ public final class TouchPad {
         if (g == null) {
             return false;
         }
-        Pointer p = new Pointer(g.control);
+        Pointer p = new Pointer(g.control, x, y);
         pointers.put(pointerId, p);
         update(p, g, x, y);
         recompute();
@@ -234,36 +264,51 @@ public final class TouchPad {
 
     /** Recompute one pointer's contribution from its current position. */
     private void update(Pointer p, TouchLayout.Geometry g, float x, float y) {
+        if (p.aims()) {
+            // A stick centred where the finger landed. FIRE stays held however far the
+            // thumb drags from the button: dragging is how it aims.
+            setStick(p, (x - p.originX) / lookRadius, (y - p.originY) / lookRadius);
+            p.holding = true;
+            return;
+        }
         switch (p.control.kind) {
-            case STICK: {
-                float dx = (x - g.cx) / g.rx;
-                float dy = (y - g.cy) / g.ry;
-                float len = (float) Math.sqrt(dx * dx + dy * dy);
-                if (len < STICK_DEADZONE) {
-                    p.stickX = 0f;
-                    p.stickY = 0f;
-                } else {
-                    if (len > 1f) {
-                        // Clamp to the rim but keep the direction, so the stick stays
-                        // at full tilt while the finger travels outside the ring.
-                        dx /= len;
-                        dy /= len;
-                        len = 1f;
-                    }
-                    // Shape the magnitude, not the components, so the direction the
-                    // thumb is pointing is preserved exactly; only how far it counts
-                    // as pushed changes. See stickGamma().
-                    float shaped = (float) Math.pow(len, stickGamma());
-                    float scale = shaped / len;
-                    p.stickX = dx * scale;
-                    p.stickY = dy * scale;
-                }
+            case STICK:
+                setStick(p, (x - g.cx) / g.rx, (y - g.cy) / g.ry);
                 break;
-            }
             default:
                 p.holding = g.hit(x, y, RELEASE_SLOP);
                 break;
         }
+    }
+
+    /** Store a stick offset (in stick radii) as both raw and shaped deflection. */
+    private void setStick(Pointer p, float dx, float dy) {
+        float len = (float) Math.sqrt(dx * dx + dy * dy);
+        if (len < STICK_DEADZONE) {
+            p.stickX = p.stickY = p.rawX = p.rawY = 0f;
+            return;
+        }
+        if (len > 1f) {
+            // Clamp to the rim but keep the direction, so the stick stays at full tilt
+            // while the finger travels outside the ring.
+            dx /= len;
+            dy /= len;
+            len = 1f;
+        }
+        p.rawX = dx;
+        p.rawY = dy;
+        // Shape the magnitude, not the components, so the direction the thumb is
+        // pointing is preserved exactly; only how far it counts as pushed changes.
+        // See stickGamma().
+        float shaped = (float) Math.pow(len, stickGamma());
+        float scale = shaped / len;
+        p.stickX = dx * scale;
+        p.stickY = dy * scale;
+    }
+
+    /** The larger-magnitude of two values, so two fingers never add up. */
+    private static float stronger(float current, float candidate) {
+        return Math.abs(candidate) > Math.abs(current) ? candidate : current;
     }
 
     /** Rebuild the mask and axes from every live pointer. */
@@ -272,17 +317,53 @@ public final class TouchPad {
         int mask = 0;
         Arrays.fill(axes, 0f);
 
+        // Gather the two sticks first; where they go depends on the scheme. Two
+        // fingers on one stick is not a thing a hand does, but if it happens the
+        // larger deflection wins rather than the sum.
+        float moveX = 0f, moveY = 0f, moveRawX = 0f, moveRawY = 0f;
+        float lookX = 0f, lookY = 0f, lookRawY = 0f;
+        for (Pointer p : pointers.values()) {
+            if (p.control.kind == TouchControl.Kind.STICK) {
+                moveX = stronger(moveX, p.stickX);
+                moveY = stronger(moveY, p.stickY);
+                moveRawX = stronger(moveRawX, p.rawX);
+                moveRawY = stronger(moveRawY, p.rawY);
+            } else if (p.aims()) {
+                lookX = stronger(lookX, p.stickX);
+                lookY = stronger(lookY, p.stickY);
+                lookRawY = stronger(lookRawY, p.rawY);
+            }
+        }
+        moveKnobX = moveX;
+        moveKnobY = moveY;
+
+        final int X = TouchControl.Sdl.AXIS_LEFTX;
+        final int Y = TouchControl.Sdl.AXIS_LEFTY;
+        switch (layout.scheme) {
+            case SHOOTER_TUROK:
+                // The game aims with the N64 stick and walks with the C-Buttons.
+                axes[X] = lookX;
+                axes[Y] = lookY;
+                mask |= cButtonsX(moveRawX) | cButtonsY(moveRawY);
+                break;
+            case SHOOTER_BROWN_EYE:
+                // The N64 stick walks (up/down) and turns (left/right); C-Left/Right
+                // step sideways and C-Up/Down look up and down. So the move stick's
+                // forward/back and the aim's left/right share the N64 stick.
+                axes[X] = lookX;
+                axes[Y] = moveY;
+                mask |= cButtonsX(moveRawX) | cButtonsY(lookRawY);
+                break;
+            default:
+                axes[X] = moveX;
+                axes[Y] = moveY;
+                break;
+        }
+
         for (Pointer p : pointers.values()) {
             switch (p.control.kind) {
                 case STICK:
-                    // Two fingers on one stick is not a thing a hand does, but if it
-                    // happens the larger deflection wins rather than the sum.
-                    if (Math.abs(p.stickX) > Math.abs(axes[TouchControl.Sdl.AXIS_LEFTX])) {
-                        axes[TouchControl.Sdl.AXIS_LEFTX] = p.stickX;
-                    }
-                    if (Math.abs(p.stickY) > Math.abs(axes[TouchControl.Sdl.AXIS_LEFTY])) {
-                        axes[TouchControl.Sdl.AXIS_LEFTY] = p.stickY;
-                    }
+                case LOOK:
                     break;
                 default:
                     if (!p.holding) {
@@ -311,6 +392,20 @@ public final class TouchPad {
         buttonMask = mask;
     }
 
+    /** C-Left/C-Right (sent as D-pad, see TouchControl) for a stick's x deflection. */
+    private static int cButtonsX(float x) {
+        if (x <= -DIGITAL_THRESHOLD) return 1 << TouchControl.Sdl.BUTTON_DPAD_LEFT;
+        if (x >= DIGITAL_THRESHOLD) return 1 << TouchControl.Sdl.BUTTON_DPAD_RIGHT;
+        return 0;
+    }
+
+    /** C-Up/C-Down for a stick's y deflection (screen y grows downward). */
+    private static int cButtonsY(float y) {
+        if (y <= -DIGITAL_THRESHOLD) return 1 << TouchControl.Sdl.BUTTON_DPAD_UP;
+        if (y >= DIGITAL_THRESHOLD) return 1 << TouchControl.Sdl.BUTTON_DPAD_DOWN;
+        return 0;
+    }
+
     /** True if a control was newly pressed by the event just processed. */
     public boolean consumePressed() {
         boolean was = pressedThisEvent;
@@ -332,7 +427,7 @@ public final class TouchPad {
             if (p.control != control) {
                 continue;
             }
-            if (control.kind == TouchControl.Kind.STICK) {
+            if (control.kind == TouchControl.Kind.STICK || control.kind == TouchControl.Kind.LOOK) {
                 return true;
             }
             if (p.holding) {
@@ -347,12 +442,28 @@ public final class TouchPad {
         return false;
     }
 
-    /** Current stick deflection, for drawing the knob. */
+    /** Current move-stick deflection, for drawing the knob. */
     public float stickX() {
-        return axes[TouchControl.Sdl.AXIS_LEFTX];
+        return moveKnobX;
     }
 
     public float stickY() {
-        return axes[TouchControl.Sdl.AXIS_LEFTY];
+        return moveKnobY;
+    }
+
+    /**
+     * The aim stick of a finger currently aiming (in the aiming area or dragging
+     * FIRE), for drawing: {centre x, centre y, knob x, knob y, radius}, or null.
+     */
+    public float[] aimStick() {
+        for (Pointer p : pointers.values()) {
+            if (p.aims()) {
+                return new float[] {
+                        p.originX, p.originY,
+                        p.originX + p.rawX * lookRadius, p.originY + p.rawY * lookRadius,
+                        lookRadius };
+            }
+        }
+        return null;
     }
 }

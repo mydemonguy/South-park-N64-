@@ -32,7 +32,7 @@ import java.util.Map;
 public final class TouchLayout {
 
     /** Serialisation version, so a future layout change can migrate rather than reset. */
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
 
     /** Bounds for the global size multiplier the settings screen offers. */
     public static final float SCALE_MIN = 0.65f;
@@ -50,6 +50,56 @@ public final class TouchLayout {
         ALWAYS,
         /** Never draw it — the pre-existing controller-only behaviour. */
         NEVER
+    }
+
+    /**
+     * Which pad is drawn, and how the sticks reach the game.
+     *
+     * <p>South Park is a first-person shooter with two control setups of its own,
+     * picked in the game's options: <b>Turok</b> (the stick aims, the C-Buttons move)
+     * and <b>Brown-Eye</b> (the stick moves forward/back and turns, C-Left/Right step
+     * sideways, C-Up/Down look up and down). The shooter schemes give either one the
+     * modern phone layout — move on the left, aim on the right — by routing each half
+     * of each on-screen stick to whatever the chosen setup reads it from. The game
+     * itself is not told; the scheme has to match the setup chosen there.
+     */
+    public enum Scheme {
+        /** Move/aim sticks for the game's Turok controls. */
+        SHOOTER_TUROK,
+        /** Move/aim sticks for the game's Brown-Eye controls. */
+        SHOOTER_BROWN_EYE,
+        /** The original N64 pad, button for button. */
+        CLASSIC;
+
+        public boolean isShooter() {
+            return this != CLASSIC;
+        }
+    }
+
+    /** Controls that belong to the classic pad. */
+    private static boolean inClassic(TouchControl c) {
+        switch (c) {
+            case LOOK: case FIRE: case JUMP: case ALT:
+                return false;
+            default:
+                return true;
+        }
+    }
+
+    /** Controls that belong to the shooter pad. */
+    private static boolean inShooter(TouchControl c) {
+        switch (c) {
+            case STICK: case LOOK: case FIRE: case JUMP: case ALT:
+            case A: case B: case START: case MENU:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** Whether a control is part of the current scheme's pad at all. */
+    public boolean inScheme(TouchControl c) {
+        return scheme.isShooter() ? inShooter(c) : inClassic(c);
     }
 
     /** A control's placement: normalised centre plus a size multiplier of its own. */
@@ -71,7 +121,15 @@ public final class TouchLayout {
         }
     }
 
+    /**
+     * Placements, one set per pad. The two pads share A, B, the stick, START and the
+     * menu handle but want them in different places, and moving one in the shooter
+     * editor must not move it on the classic pad.
+     */
     private final Map<TouchControl, Placement> placements = new EnumMap<>(TouchControl.class);
+    private final Map<TouchControl, Placement> shooterPlacements = new EnumMap<>(TouchControl.class);
+
+    public Scheme scheme = Scheme.SHOOTER_TUROK;
 
     public Visibility visibility = Visibility.AUTO;
     public float globalScale = 1.0f;
@@ -93,7 +151,7 @@ public final class TouchLayout {
      * them, and the three triggers along the top edge under the index fingers.
      *
      * <p>The vertical placement is biased low on purpose. Thumbs rest at the bottom
-     * corners, and the top third of a Goemon screen is where the HUD and the horizon
+     * corners, and the top third of the screen is where the HUD and the horizon
      * live — the two things a hand should never be covering.
      */
     public static TouchLayout defaults() {
@@ -124,22 +182,64 @@ public final class TouchLayout {
         l.placements.put(TouchControl.START, new Placement(0.560f, 0.905f, 1.0f, true));
         l.placements.put(TouchControl.MENU, new Placement(0.440f, 0.905f, 1.0f, true));
 
+        l.shooterPlacements.putAll(shooterDefaults());
         return l;
     }
 
+    /**
+     * The shooter pad: move stick under the left thumb, and on the right a big FIRE
+     * where the thumb rests, JUMP just inside it, and the gadget switches (A, B, ALT)
+     * up and out of the way, since they are pressed between fights rather than in them.
+     * Everything else on the right half is the aiming area.
+     */
+    private static Map<TouchControl, Placement> shooterDefaults() {
+        Map<TouchControl, Placement> m = new EnumMap<>(TouchControl.class);
+        m.put(TouchControl.STICK, new Placement(0.145f, 0.660f, 1.0f, true));
+        m.put(TouchControl.LOOK, new Placement(0.725f, 0.5f, 1.0f, true));
+        m.put(TouchControl.FIRE, new Placement(0.895f, 0.700f, 1.0f, true));
+        m.put(TouchControl.JUMP, new Placement(0.760f, 0.835f, 1.0f, true));
+        m.put(TouchControl.B, new Placement(0.800f, 0.200f, 0.85f, true));
+        m.put(TouchControl.A, new Placement(0.905f, 0.270f, 0.85f, true));
+        m.put(TouchControl.ALT, new Placement(0.945f, 0.465f, 1.0f, true));
+        m.put(TouchControl.START, new Placement(0.560f, 0.905f, 1.0f, true));
+        m.put(TouchControl.MENU, new Placement(0.440f, 0.905f, 1.0f, true));
+        return m;
+    }
+
+    /** Put every control of the current pad back where it started; settings stay. */
+    public void resetPlacements() {
+        TouchLayout d = defaults();
+        if (scheme.isShooter()) {
+            shooterPlacements.clear();
+            shooterPlacements.putAll(d.shooterPlacements);
+        } else {
+            placements.clear();
+            placements.putAll(d.placements);
+            cSpread = d.cSpread;
+        }
+    }
+
     public Placement placement(TouchControl control) {
-        Placement p = placements.get(control);
+        return placement(control, scheme.isShooter());
+    }
+
+    private Placement placement(TouchControl control, boolean shooter) {
+        Map<TouchControl, Placement> map = shooter ? shooterPlacements : placements;
+        Placement p = map.get(control);
         if (p == null) {
             // A control absent from a persisted layout (an older save, a hand-edited
-            // file) falls back to its stock placement rather than vanishing.
-            p = defaults().placements.get(control).copy();
-            placements.put(control, p);
+            // file) falls back to its stock placement rather than vanishing. A control
+            // that is not on this pad at all gets a hidden placeholder.
+            TouchLayout d = defaults();
+            Placement stock = (shooter ? d.shooterPlacements : d.placements).get(control);
+            p = stock != null ? stock.copy() : new Placement(0.5f, 0.5f, 1.0f, false);
+            map.put(control, p);
         }
         return p;
     }
 
     public boolean isVisible(TouchControl control) {
-        return placement(control).visible;
+        return inScheme(control) && placement(control).visible;
     }
 
     // ----------------------------------------------------------------- geometry
@@ -173,6 +273,10 @@ public final class TouchLayout {
          * to play does this; the artwork is the label, not the hitbox.
          */
         public boolean hit(float x, float y, float slop) {
+            if (control.kind == TouchControl.Kind.LOOK) {
+                // A region, not a target: its edges are exact.
+                return Math.abs(x - cx) <= rx && Math.abs(y - cy) <= ry;
+            }
             float dx = (x - cx) / (rx * slop);
             float dy = (y - cy) / (ry * slop);
             return dx * dx + dy * dy <= 1.0f;
@@ -194,6 +298,9 @@ public final class TouchLayout {
                           return 0.062f;
             case START: case MENU:
                           return 0.042f;
+            case FIRE:    return 0.110f;
+            case JUMP:    return 0.080f;
+            case ALT:     return 0.055f;
             default:      return 0.060f;
         }
     }
@@ -209,6 +316,14 @@ public final class TouchLayout {
         float availW = Math.max(1f, w - insetLeft - insetRight);
         float availH = Math.max(1f, h - insetTop - insetBottom);
         float unit = sizingUnit(availW, availH);
+
+        if (control.kind == TouchControl.Kind.LOOK) {
+            // The right part of the screen, from just past the middle to the edge.
+            float left = insetLeft + availW * LOOK_LEFT_EDGE;
+            float right = insetLeft + availW;
+            return new Geometry(control, (left + right) / 2f, insetTop + availH / 2f,
+                    (right - left) / 2f, availH / 2f);
+        }
 
         Placement p = placement(control);
         float scale = clamp(globalScale, SCALE_MIN, SCALE_MAX) * p.scale;
@@ -265,6 +380,21 @@ public final class TouchLayout {
         return Math.min(availH, availW * (9f / 16f));
     }
 
+    /** Where the aiming area starts, as a fraction of the usable width. */
+    private static final float LOOK_LEFT_EDGE = 0.45f;
+
+    /**
+     * How far a finger has to move from where it landed in the aiming area for full
+     * aim speed, in pixels. A little smaller than the move stick: aiming is done in
+     * short flicks and should not need the thumb to travel far.
+     */
+    public float lookRadius(float w, float h, float insetLeft, float insetTop,
+                            float insetRight, float insetBottom) {
+        float availW = Math.max(1f, w - insetLeft - insetRight);
+        float availH = Math.max(1f, h - insetTop - insetBottom);
+        return 0.115f * sizingUnit(availW, availH) * clamp(globalScale, SCALE_MIN, SCALE_MAX);
+    }
+
     /** Keep a normalised position inside the surface. */
     public static float clamp01(float v) {
         return clamp(v, 0f, 1f);
@@ -291,17 +421,35 @@ public final class TouchLayout {
         StringBuilder sb = new StringBuilder();
         sb.append("v=").append(VERSION);
         sb.append(";vis=").append(visibility.name());
+        sb.append(";scheme=").append(scheme.name());
         sb.append(String.format(Locale.US, ";scale=%.4f;op=%.4f;spread=%.4f;hap=%d",
                 globalScale, opacity, cSpread, haptics ? 1 : 0));
         for (TouchControl c : TouchControl.values()) {
-            Placement p = placement(c);
-            sb.append(String.format(Locale.US, ";%s=%.5f,%.5f,%.4f,%d",
-                    c.name(), p.x, p.y, p.scale, p.visible ? 1 : 0));
+            if (inClassic(c)) {
+                Placement p = placement(c, false);
+                sb.append(String.format(Locale.US, ";%s=%.5f,%.5f,%.4f,%d",
+                        c.name(), p.x, p.y, p.scale, p.visible ? 1 : 0));
+            }
+            if (inShooter(c)) {
+                Placement p = placement(c, true);
+                sb.append(String.format(Locale.US, ";%s%s=%.5f,%.5f,%.4f,%d",
+                        SHOOTER_PREFIX, c.name(), p.x, p.y, p.scale, p.visible ? 1 : 0));
+            }
         }
         return sb.toString();
     }
 
-    /** Parse {@link #serialize} output, falling back to defaults for anything bad. */
+    /** Key prefix of the shooter pad's placements in the serialised form. */
+    private static final String SHOOTER_PREFIX = "S_";
+
+    /**
+     * Parse {@link #serialize} output, falling back to defaults for anything bad.
+     *
+     * <p>A layout saved before the shooter pad existed has no {@code scheme} key and
+     * so comes back with the default, the shooter pad: this is a shooter, and the old
+     * pad was laid out for a third-person game. Its classic placements are kept for
+     * anyone who switches back.
+     */
     public static TouchLayout deserialize(String s) {
         TouchLayout l = defaults();
         if (s == null || s.isEmpty()) {
@@ -333,15 +481,20 @@ public final class TouchLayout {
                     case "hap":
                         l.haptics = "1".equals(value);
                         continue;
+                    case "scheme":
+                        l.scheme = Scheme.valueOf(value);
+                        continue;
                     default:
                         break;
                 }
-                TouchControl control = TouchControl.valueOf(key);
+                boolean shooter = key.startsWith(SHOOTER_PREFIX);
+                TouchControl control = TouchControl.valueOf(
+                        shooter ? key.substring(SHOOTER_PREFIX.length()) : key);
                 String[] f = value.split(",");
                 if (f.length < 4) {
                     continue;
                 }
-                Placement p = l.placement(control);
+                Placement p = l.placement(control, shooter);
                 p.x = clamp01(Float.parseFloat(f[0]));
                 p.y = clamp01(Float.parseFloat(f[1]));
                 p.scale = clamp(Float.parseFloat(f[2]), 0.5f, 2.0f);

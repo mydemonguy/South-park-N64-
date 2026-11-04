@@ -475,6 +475,11 @@ public class TouchOverlayView extends View {
                 float y = event.getY();
                 TouchLayout.Geometry hit = null;
                 for (TouchLayout.Geometry g : pad.geometry()) {
+                    // The aiming area is the space left between the buttons, not
+                    // something that can be moved or sized.
+                    if (g.control.kind == TouchControl.Kind.LOOK) {
+                        continue;
+                    }
                     if (g.hit(x, y, 1.15f)) {
                         hit = g;
                         break;
@@ -701,6 +706,9 @@ public class TouchOverlayView extends View {
             case STICK:
                 drawStick(canvas, g, alpha);
                 break;
+            case LOOK:
+                drawAim(canvas, g);
+                break;
             case SHOULDER:
                 rect.set(g.cx - g.rx, g.cy - g.ry, g.cx + g.rx, g.cy + g.ry);
                 canvas.drawRoundRect(rect, g.ry, g.ry, fill);
@@ -716,12 +724,63 @@ public class TouchOverlayView extends View {
                 canvas.drawCircle(g.cx, g.cy, g.rx, fill);
                 canvas.drawCircle(g.cx, g.cy, g.rx, stroke);
                 drawLabel(canvas, g.control.label, g.cx, g.cy,
-                        g.rx * (g.control == TouchControl.START ? 0.42f : 0.78f));
+                        g.rx * labelScale(g.control));
                 if (g.control.dir != TouchControl.Dir.NONE) {
                     drawArrow(canvas, g);
                 }
                 break;
         }
+    }
+
+    /** Label size relative to the button radius: long words need a smaller font. */
+    private static float labelScale(TouchControl control) {
+        int length = control.label.length();
+        if (length >= 5) return 0.40f;
+        if (length >= 3) return 0.48f;
+        return 0.78f;
+    }
+
+    /**
+     * The aiming area. Invisible while idle: it is the open picture, and anything drawn
+     * there would cover the thing being aimed at. While a finger aims, a ring is drawn
+     * where it landed with a knob at the finger, the same shapes as the move stick, so
+     * it reads as "a stick that appeared under my thumb". The editor outlines the area
+     * so its extent is known.
+     */
+    private void drawAim(Canvas canvas, TouchLayout.Geometry g) {
+        if (editing) {
+            rect.set(g.cx - g.rx, g.cy - g.ry, g.cx + g.rx, g.cy + g.ry);
+            stroke.setAlpha((int) (stroke.getAlpha() * 0.5f));
+            canvas.drawRoundRect(rect, g.rx * 0.08f, g.rx * 0.08f, stroke);
+            drawLabel(canvas, "AIM", g.cx, g.cy, g.ry * 0.12f);
+            return;
+        }
+        drawAimRing(canvas);
+    }
+
+    /** The floating aim stick, if a finger is aiming right now. */
+    private void drawAimRing(Canvas canvas) {
+        float[] aim = pad.aimStick();
+        if (aim == null) {
+            return;
+        }
+        float dx = aim[2] - aim[0];
+        float dy = aim[3] - aim[1];
+        if (dx * dx + dy * dy < 1f && !pad.isHeld(TouchControl.LOOK)) {
+            // FIRE pressed without dragging yet: the button itself is the feedback.
+            return;
+        }
+        int alpha = alphaFor(true);
+        fill.setColor(Color.BLACK);
+        fill.setAlpha((int) (alpha * 0.30f));
+        stroke.setColor(0xFFFFFFFF);
+        stroke.setAlpha((int) (alpha * 0.8f));
+        stroke.setStrokeWidth(Math.max(2f, aim[4] * 0.05f));
+        canvas.drawCircle(aim[0], aim[1], aim[4], fill);
+        canvas.drawCircle(aim[0], aim[1], aim[4], stroke);
+        fill.setColor(0xFFDDE3EA);
+        fill.setAlpha((int) (alpha * 0.65f));
+        canvas.drawCircle(aim[2], aim[3], aim[4] * 0.38f, fill);
     }
 
     private void drawStick(Canvas canvas, TouchLayout.Geometry g, int alpha) {

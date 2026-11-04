@@ -196,7 +196,10 @@ public final class TouchOverlayController {
         Button reset = new Button(activity);
         reset.setText("Reset");
         reset.setOnClickListener(v -> {
-            view.setLayout(TouchLayout.defaults());
+            // Only where things are: the chosen pad, size and opacity stay.
+            TouchLayout layout = view.layout();
+            layout.resetPlacements();
+            view.setLayout(layout);
             persist();
         });
         bar.addView(reset);
@@ -245,6 +248,41 @@ public final class TouchOverlayController {
         where.setTextColor(0xFF93A1B0);
         root.addView(where);
 
+        root.addView(label("Layout"));
+        TextView schemeHint = label("Pick the one that matches the controller setup chosen in the "
+                + "game's own options.");
+        schemeHint.setTextColor(0xFF93A1B0);
+        schemeHint.setPadding(0, 0, 0, dp(4));
+        root.addView(schemeHint);
+        android.widget.RadioGroup schemes = new android.widget.RadioGroup(activity);
+        final TouchLayout.Scheme[] order = {
+                TouchLayout.Scheme.SHOOTER_TUROK,
+                TouchLayout.Scheme.SHOOTER_BROWN_EYE,
+                TouchLayout.Scheme.CLASSIC };
+        final String[] names = {
+                "Move + aim sticks (game set to Turok controls)",
+                "Move + aim sticks (game set to Brown-Eye controls)",
+                "Classic N64 pad" };
+        for (int i = 0; i < order.length; i++) {
+            android.widget.RadioButton b = new android.widget.RadioButton(activity);
+            b.setText(names[i]);
+            b.setId(View.generateViewId());
+            final TouchLayout.Scheme scheme = order[i];
+            schemes.addView(b);
+            if (layout.scheme == scheme) {
+                b.setChecked(true);
+            }
+            b.setOnCheckedChangeListener((button, checked) -> {
+                if (checked && layout.scheme != scheme) {
+                    view.release();
+                    layout.scheme = scheme;
+                    view.setLayout(layout);
+                    persist();
+                }
+            });
+        }
+        root.addView(schemes);
+
         root.addView(label("Size"));
         root.addView(slider(layout.globalScale, TouchLayout.SCALE_MIN, TouchLayout.SCALE_MAX,
                 value -> {
@@ -270,9 +308,13 @@ public final class TouchOverlayController {
         });
         root.addView(haptics);
 
+        // Scrolls because a phone held sideways is short, and the sheet is tall.
+        android.widget.ScrollView scroll = new android.widget.ScrollView(activity);
+        scroll.addView(root);
+
         new AlertDialog.Builder(activity)
                 .setTitle("On-screen controls")
-                .setView(root)
+                .setView(scroll)
                 .setPositiveButton("Close", null)
                 .setNeutralButton("Edit layout…", (d, which) -> {
                     if (parent != null) {
@@ -290,6 +332,9 @@ public final class TouchOverlayController {
             case MENU:    return "Menu";
             case C_UP: case C_RIGHT: case C_DOWN: case C_LEFT:
                           return "C buttons";
+            case FIRE:    return "Fire";
+            case JUMP:    return "Jump";
+            case ALT:     return "Alt fire";
             default:      return control.name();
         }
     }
