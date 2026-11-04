@@ -367,6 +367,7 @@ if (ANDROID)
     list(APPEND SOURCES ${CMAKE_SOURCE_DIR}/src/main/android_glue.cpp)
     list(APPEND SOURCES ${CMAKE_SOURCE_DIR}/src/main/android_diag.cpp)
     list(APPEND SOURCES ${CMAKE_SOURCE_DIR}/src/main/android_touch.cpp)
+    list(APPEND SOURCES ${CMAKE_SOURCE_DIR}/src/main/android_perf.cpp)
 endif()
 
 target_include_directories(Goemon64Recompiled PRIVATE

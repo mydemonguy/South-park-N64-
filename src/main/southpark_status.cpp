@@ -24,6 +24,9 @@ extern std::atomic_bool exited;   // librecomp (recomp.cpp)
 extern "C" uint32_t southpark_dma_count();
 extern "C" uint32_t southpark_vm_pages_in();
 extern "C" void southpark_renderer_timings(char* out, size_t size);
+#if defined(__ANDROID__)
+std::string southpark_android_thread_report(long seconds);
+#endif
 
 namespace goemon64 {
     std::string get_game_thread_name(const OSThread* t);
@@ -112,6 +115,14 @@ namespace southpark::status {
             if (timings[0] != '\0') {
                 std::fprintf(stderr, "[perf] %s\n", timings);
             }
+#if defined(__ANDROID__)
+            {
+                const std::string cpu = southpark_android_thread_report(seconds);
+                if (!cpu.empty()) {
+                    std::fputs(cpu.c_str(), stderr);
+                }
+            }
+#endif
             // Copy the list and name threads without holding the lock: the naming
             // callback registers threads itself (register_thread takes the lock).
             std::vector<const OSThread*> snapshot;
