@@ -511,9 +511,16 @@ extern "C" void southpark_renderer_timings(char* out, size_t size) {
     const unsigned long long frames = now.workloads - last_counters.workloads;
     if (frames > 0) {
         const size_t used = std::strlen(out);
-        std::snprintf(out + used, size - used, ", per frame: %.1f framebuffer pairs, %.1f depth switches",
-            double(now.framebufferPairs - last_counters.framebufferPairs) / double(frames),
-            double(now.depthSwitches - last_counters.depthSwitches) / double(frames));
+        const double f = double(frames);
+        const double setup = double(now.gpuSetupNs - last_counters.gpuSetupNs) / f / 1e6;
+        const double draw = double(now.gpuDrawNs - last_counters.gpuDrawNs) / f / 1e6;
+        const double total = double(now.gpuTotalNs - last_counters.gpuTotalNs) / f / 1e6;
+        std::snprintf(out + used, size - used,
+            ", per frame: %.1f framebuffer pairs, %.1f depth switches, %.0f draws, gpu split %.1f setup + %.1f drawing + %.1f other ms",
+            double(now.framebufferPairs - last_counters.framebufferPairs) / f,
+            double(now.depthSwitches - last_counters.depthSwitches) / f,
+            double(now.draws - last_counters.draws) / f,
+            setup, draw, std::max(0.0, total - setup - draw));
     }
     last_counters = now;
 }

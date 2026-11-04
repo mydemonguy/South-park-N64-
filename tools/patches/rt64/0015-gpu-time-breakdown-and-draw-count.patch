@@ -1,0 +1,172 @@
+diff --git a/src/common/rt64_device_workarounds.cpp b/src/common/rt64_device_workarounds.cpp
+index 2fa273c..2d8e33a 100644
+--- a/src/common/rt64_device_workarounds.cpp
++++ b/src/common/rt64_device_workarounds.cpp
+@@ -67,10 +67,23 @@ namespace RT64 {
+     static std::atomic<unsigned long long> counterWorkloads = 0;
+     static std::atomic<unsigned long long> counterFramebufferPairs = 0;
+     static std::atomic<unsigned long long> counterDepthSwitches = 0;
++    static std::atomic<unsigned long long> counterDraws = 0;
++    static std::atomic<unsigned long long> counterGpuSetupNs = 0;
++    static std::atomic<unsigned long long> counterGpuDrawNs = 0;
++    static std::atomic<unsigned long long> counterGpuTotalNs = 0;
+ 
+-    void CountWorkload(unsigned int framebufferPairs) {
+-        counterWorkloads.fetch_add(1, std::memory_order_relaxed);
++    void CountWorkload(unsigned int framebufferPairs, unsigned long long setupNs,
++                       unsigned long long drawNs, unsigned long long totalNs) {
+         counterFramebufferPairs.fetch_add(framebufferPairs, std::memory_order_relaxed);
++        counterGpuSetupNs.fetch_add(setupNs, std::memory_order_relaxed);
++        counterGpuDrawNs.fetch_add(drawNs, std::memory_order_relaxed);
++        counterGpuTotalNs.fetch_add(totalNs, std::memory_order_relaxed);
++        // Last, so a reader that sees the new count also sees this workload's sums.
++        counterWorkloads.fetch_add(1, std::memory_order_release);
++    }
++
++    void CountDraw() {
++        counterDraws.fetch_add(1, std::memory_order_relaxed);
+     }
+ 
+     void CountDepthSwitch() {
+@@ -78,7 +91,10 @@ namespace RT64 {
+     }
+ 
+     RenderCounters GetRenderCounters() {
+-        return { counterWorkloads.load(std::memory_order_relaxed), counterFramebufferPairs.load(std::memory_order_relaxed),
+-            counterDepthSwitches.load(std::memory_order_relaxed) };
++        const unsigned long long workloads = counterWorkloads.load(std::memory_order_acquire);
++        return { workloads, counterFramebufferPairs.load(std::memory_order_relaxed),
++            counterDepthSwitches.load(std::memory_order_relaxed), counterDraws.load(std::memory_order_relaxed),
++            counterGpuSetupNs.load(std::memory_order_relaxed), counterGpuDrawNs.load(std::memory_order_relaxed),
++            counterGpuTotalNs.load(std::memory_order_relaxed) };
+     }
+ };
+diff --git a/src/common/rt64_device_workarounds.h b/src/common/rt64_device_workarounds.h
+index df7e141..a818d87 100644
+--- a/src/common/rt64_device_workarounds.h
++++ b/src/common/rt64_device_workarounds.h
+@@ -55,8 +55,17 @@ namespace RT64 {
+         unsigned long long workloads;
+         unsigned long long framebufferPairs;
+         unsigned long long depthSwitches;
++        unsigned long long draws;
++        // GPU time, from timestamps in the workload's command list: everything before
++        // the first framebuffer is drawn (uploads, the RSP and vertex compute passes),
++        // the framebuffers' own drawing, and the whole workload.
++        unsigned long long gpuSetupNs;
++        unsigned long long gpuDrawNs;
++        unsigned long long gpuTotalNs;
+     };
+-    void CountWorkload(unsigned int framebufferPairs);
++    void CountWorkload(unsigned int framebufferPairs, unsigned long long setupNs,
++                       unsigned long long drawNs, unsigned long long totalNs);
+     void CountDepthSwitch();
++    void CountDraw();
+     RenderCounters GetRenderCounters();
+ };
+diff --git a/src/contrib/plume b/src/contrib/plume
+--- a/src/contrib/plume
++++ b/src/contrib/plume
+@@ -1 +1 @@
+-Subproject commit e12bec2f14d67245dc388fa6926148bfef149142
++Subproject commit e12bec2f14d67245dc388fa6926148bfef149142-dirty
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+index 156c0ee..56e3233 100644
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -12,6 +12,11 @@
+ #define ENABLE_HIGH_RESOLUTION_RENDERER 1
+ 
+ namespace RT64 {
++    // GPU timestamps per workload: start, end of setup, then a before/after pair around
++    // the drawing of each of the first GpuTimedPairs framebuffers, then the end.
++    static const uint32_t GpuTimedPairs = 8;
++    static const uint32_t GpuTimestampCount = 3 + GpuTimedPairs * 2;
++
+     // WorkloadQueue
+ 
+     WorkloadQueue::WorkloadQueue() {
+@@ -105,7 +110,7 @@ namespace RT64 {
+         vertexProcessor = std::make_unique<VertexProcessor>(ext.device);
+         framebufferRenderer = std::make_unique<FramebufferRenderer>(ext.workloadGraphicsWorker, true, ext.createdGraphicsAPI, ext.shaderLibrary);
+         renderFramebufferManager = std::make_unique<RenderFramebufferManager>(ext.device);
+-        queryPool = ext.device->createQueryPool(2);
++        queryPool = ext.device->createQueryPool(GpuTimestampCount);
+ 
+         projectionProcessor.setup(ext.workloadGraphicsWorker);
+         transformProcessor.setup(ext.workloadGraphicsWorker);
+@@ -702,10 +707,12 @@ namespace RT64 {
+ 
+             workerMutex.lock();
+             ext.workloadGraphicsWorker->commandList->begin();
+-            ext.workloadGraphicsWorker->commandList->resetQueryPool(queryPool.get(), 0, 2);
++            ext.workloadGraphicsWorker->commandList->resetQueryPool(queryPool.get(), 0, GpuTimestampCount);
+             ext.workloadGraphicsWorker->commandList->writeTimestamp(queryPool.get(), 0);
+             framebufferRenderer->endFramebuffers(ext.workloadGraphicsWorker, &workload.drawBuffers, &workload.outputBuffers, workloadConfig.raytracingEnabled);
+             framebufferRenderer->recordSetup(ext.workloadGraphicsWorker, bufferUploaders, processRSP ? rspProcessor.get() : nullptr, processWorldVertices ? vertexProcessor.get() : nullptr, &workload.outputBuffers, workloadConfig.raytracingEnabled);
++            ext.workloadGraphicsWorker->commandList->writeTimestamp(queryPool.get(), 1);
++            uint32_t timedPairs = 0;
+             
+             // Record all framebuffer pairs.
+             uint32_t framebufferIndex = 0;
+@@ -792,7 +799,15 @@ namespace RT64 {
+                         }
+                     }
+                     
++                    const bool timePair = (timedPairs < GpuTimedPairs);
++                    if (timePair) {
++                        ext.workloadGraphicsWorker->commandList->writeTimestamp(queryPool.get(), 2 + timedPairs * 2);
++                    }
+                     framebufferRenderer->recordFramebuffer(ext.workloadGraphicsWorker, framebufferIndex++);
++                    if (timePair) {
++                        ext.workloadGraphicsWorker->commandList->writeTimestamp(queryPool.get(), 3 + timedPairs * 2);
++                        timedPairs++;
++                    }
+ 
+                     // Transition the render targets in case the present queue will show them so it doesn't have to perform transitions.
+                     if (colorTarget != nullptr && depthTarget != nullptr) {
+@@ -840,7 +855,11 @@ namespace RT64 {
+                     fbPair.endFbOperations, targetManager, fixedResScale, f, workload.submissionFrame);
+             }
+ 
+-            ext.workloadGraphicsWorker->commandList->writeTimestamp(queryPool.get(), 1);
++            // Every query must be written for the results to be readable, so the pair
++            // slots this workload did not use are filled with zero-length spans.
++            for (uint32_t t = 2 + timedPairs * 2; t < GpuTimestampCount; t++) {
++                ext.workloadGraphicsWorker->commandList->writeTimestamp(queryPool.get(), t);
++            }
+             ext.workloadGraphicsWorker->commandList->end();
+             framebufferRenderer->waitForUploaders();
+             ext.workloadGraphicsWorker->execute();
+@@ -850,8 +869,13 @@ namespace RT64 {
+             // Update the GPU profiler with the results from the timestamps of the frame.
+             queryPool->queryResults();
+             const uint64_t *frameTimestamps = queryPool->getResults();
+-            rendererGPUProfiler.log(double(frameTimestamps[1] - frameTimestamps[0]) / 1000000.0);
+-            CountWorkload(workload.fbPairCount);
++            const uint64_t gpuTotal = frameTimestamps[GpuTimestampCount - 1] - frameTimestamps[0];
++            rendererGPUProfiler.log(double(gpuTotal) / 1000000.0);
++            uint64_t gpuDraw = 0;
++            for (uint32_t t = 0; t < timedPairs; t++) {
++                gpuDraw += frameTimestamps[3 + t * 2] - frameTimestamps[2 + t * 2];
++            }
++            CountWorkload(workload.fbPairCount, frameTimestamps[1] - frameTimestamps[0], gpuDraw, gpuTotal);
+ 
+             // Indicate to the texture cache it's safe to delete the textures if no locks are active.
+             ext.textureCache->decrementLock();
+diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
+index f305d4e..174fe66 100644
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -535,9 +535,11 @@ namespace RT64 {
+         auto drawCallTriangles = [&](const InstanceDrawCall &drawCall) {
+             if (drawCall.type == InstanceDrawCall::Type::IndexedTriangles) {
+                 worker->commandList->drawIndexedInstanced(drawCall.triangles.faceCount * 3, 1, drawCall.triangles.indexStart, 0, 0);
++                CountDraw();
+             }
+             else {
+                 worker->commandList->drawInstanced(drawCall.triangles.faceCount * 3, 1, drawCall.triangles.indexStart, 0);
++                CountDraw();
+             }
+         };
+ 
