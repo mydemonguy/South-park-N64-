@@ -39,6 +39,28 @@ namespace goemon64 {
         {goemon64::AutosaveMode::On, "On"}
     });
 
+    // How much further than the game's own far plane the renderer draws (and fogs).
+    enum class ViewDistance {
+        Original,
+        Far,
+        Farther,
+        Max,
+        OptionCount
+    };
+
+    // Original first, so an unknown value falls back to the game's own distance.
+    NLOHMANN_JSON_SERIALIZE_ENUM(goemon64::ViewDistance, {
+        {goemon64::ViewDistance::Original, "Original"},
+        {goemon64::ViewDistance::Far, "Far"},
+        {goemon64::ViewDistance::Farther, "Farther"},
+        {goemon64::ViewDistance::Max, "Max"}
+    });
+
+    ViewDistance get_view_distance();
+    void set_view_distance(ViewDistance distance);
+    // The far-plane multiplier for a setting: 1, 1.5, 2 or 3.
+    float view_distance_scale(ViewDistance distance);
+
     enum class TargetingMode {
         Switch,
         Hold,

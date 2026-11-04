@@ -23,6 +23,7 @@
 #include "ultramodern/ultramodern.hpp"
 #include "ultramodern/config.hpp"
 
+#include "goemon_config.h"
 #include "goemon_render.h"
 #include "recomp_ui.h"
 #include "concurrentqueue.h"
@@ -540,6 +541,8 @@ void southpark_android_frame_done();
 
 void goemon64::renderer::RT64Context::send_dl(const OSTask* task) {
     southpark::status::count_gfx_task();
+    // Read per frame rather than pushed: the setting is live in the General tab.
+    RT64::SetFarPlaneScale(goemon64::view_distance_scale(goemon64::get_view_distance()));
 #if defined(__ANDROID__)
     southpark_android_frame_done();
 #endif

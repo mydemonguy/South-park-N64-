@@ -280,6 +280,7 @@ bool save_general_config(const std::filesystem::path& path) {
     config_json["mouse_sensitivity"] = recomp::get_mouse_sensitivity();
     config_json["joystick_deadzone"] = recomp::get_joystick_deadzone();
     config_json["autosave_mode"] = goemon64::get_autosave_mode();
+    config_json["view_distance"] = goemon64::get_view_distance();
     config_json["camera_invert_mode"] = goemon64::get_camera_invert_mode();
     config_json["analog_cam_mode"] = goemon64::get_analog_cam_mode();
     config_json["touch_controls_mode"] = goemon64::get_touch_controls_mode();
@@ -307,6 +308,7 @@ void set_general_settings_from_json(const nlohmann::json& config_json) {
     // Autosave, swap/attack while moving and the cheats were Goemon features with no menu
     // entries any more: force them off even if an older config saved them as on.
     goemon64::set_autosave_mode(goemon64::AutosaveMode::Off);
+    goemon64::set_view_distance(from_or_default(config_json, "view_distance", goemon64::ViewDistance::Original));
     goemon64::set_camera_invert_mode(from_or_default(config_json, "camera_invert_mode", goemon64::CameraInvertMode::InvertY));
     // The analog camera was a Goemon feature and has no menu entry any more: keep it off even if an
     // older config saved it as on (it silences the right stick's R mapping while active).

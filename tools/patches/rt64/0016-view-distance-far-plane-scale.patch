@@ -1,0 +1,131 @@
+diff --git a/src/common/rt64_device_workarounds.cpp b/src/common/rt64_device_workarounds.cpp
+index 2d8e33a..d64ac89 100644
+--- a/src/common/rt64_device_workarounds.cpp
++++ b/src/common/rt64_device_workarounds.cpp
+@@ -64,6 +64,19 @@ namespace RT64 {
+         return ubershadersEnabled.load(std::memory_order_relaxed);
+     }
+ 
++    static std::atomic<float> farPlaneScale = 1.0f;
++
++    void SetFarPlaneScale(float scale) {
++        const float previous = farPlaneScale.exchange(scale, std::memory_order_relaxed);
++        if (previous != scale) {
++            fprintf(stderr, "[rt64] view distance: far plane x%.2f\n", scale);
++        }
++    }
++
++    float GetFarPlaneScale() {
++        return farPlaneScale.load(std::memory_order_relaxed);
++    }
++
+     static std::atomic<unsigned long long> counterWorkloads = 0;
+     static std::atomic<unsigned long long> counterFramebufferPairs = 0;
+     static std::atomic<unsigned long long> counterDepthSwitches = 0;
+diff --git a/src/common/rt64_device_workarounds.h b/src/common/rt64_device_workarounds.h
+index a818d87..1c29ab8 100644
+--- a/src/common/rt64_device_workarounds.h
++++ b/src/common/rt64_device_workarounds.h
+@@ -63,6 +63,14 @@ namespace RT64 {
+         unsigned long long gpuDrawNs;
+         unsigned long long gpuTotalNs;
+     };
++    // View distance: every perspective projection the game loads has its far plane
++    // multiplied by this (1 = as the game set it). The near plane and field of view are
++    // untouched. RSP fog is placed relative to the depth range, so it moves out with
++    // the far plane. Whatever the game itself culls beyond its own distance still is not
++    // drawn: this only stops the renderer clipping and fogging what the game does send.
++    void SetFarPlaneScale(float scale);
++    float GetFarPlaneScale();
++
+     void CountWorkload(unsigned int framebufferPairs, unsigned long long setupNs,
+                        unsigned long long drawNs, unsigned long long totalNs);
+     void CountDepthSwitch();
+diff --git a/src/contrib/plume b/src/contrib/plume
+--- a/src/contrib/plume
++++ b/src/contrib/plume
+@@ -1 +1 @@
+-Subproject commit e12bec2f14d67245dc388fa6926148bfef149142
++Subproject commit e12bec2f14d67245dc388fa6926148bfef149142-dirty
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+index 72a8f6e..f3f40e8 100644
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -6,10 +6,12 @@
+ 
+ #include <algorithm>
+ #include <cassert>
++#include <cmath>
+ #include <cstdio>
+ 
+ #include "../include/rt64_extended_gbi.h"
+ #include "common/rt64_common.h"
++#include "common/rt64_device_workarounds.h"
+ #include "common/rt64_math.h"
+ #include "gbi/rt64_f3d.h"
+ #include "shared/rt64_rsp_fog.h"
+@@ -133,7 +135,63 @@ namespace RT64 {
+         segments[seg] = address;
+     }
+ 
+-    void RSP::matrixCommon(const hlslpp::float4x4 &floatMatrix, uint32_t address, uint8_t params) {
++    // Move a perspective projection's far plane out by `k`, keeping the near plane.
++    //
++    // Works on a pure projection and on one already combined with a view matrix (row
++    // vectors, so column 3 is w and column 2 is z). For any such matrix z_clip is
++    // -a * w_clip + b*s, where a = (n+f)/(n-f) and b*s is a constant: a is recovered from
++    // any row where the w column is non-zero and b*s from the translation row, then both
++    // are recomputed for the new far plane. Orthographic matrices (no w column) and
++    // anything that does not fit that shape are returned unchanged.
++    static hlslpp::float4x4 extendFarPlane(const hlslpp::float4x4 &m, float k) {
++        int best = -1;
++        float bestAbs = 0.0f;
++        for (int i = 0; i < 3; i++) {
++            const float w = std::fabs(float(m[i][3]));
++            if (w > bestAbs) {
++                bestAbs = w;
++                best = i;
++            }
++        }
++        if ((best < 0) || (bestAbs < 1e-6f)) {
++            return m;
++        }
++
++        const float a = -float(m[best][2]) / float(m[best][3]);
++        for (int i = 0; i < 3; i++) {
++            const float z = float(m[i][2]);
++            const float az = a * float(m[i][3]);
++            if (std::fabs(z + az) > 1e-3f * (std::fabs(z) + std::fabs(az)) + 1e-6f) {
++                return m;
++            }
++        }
++
++        // n/f, which must be in (0, 1) for a camera looking down -z with n < f.
++        const float r = (a + 1.0f) / (a - 1.0f);
++        if (!(a < -1.0f) || !(r > 0.0f) || !(r < 1.0f)) {
++            return m;
++        }
++
++        const float bs = float(m[3][2]) + a * float(m[3][3]);
++        const float a2 = (r + k) / (r - k);
++        const float bs2 = bs * k * (r - 1.0f) / (r - k);
++        hlslpp::float4x4 out = m;
++        for (int i = 0; i < 4; i++) {
++            out[i][2] = -a2 * float(m[i][3]) + ((i == 3) ? bs2 : 0.0f);
++        }
++
++        static float loggedScale = 0.0f;
++        if (loggedScale != k) {
++            loggedScale = k;
++            fprintf(stderr, "[rt64] view distance: projection near/far ratio %.5f, far plane x%.2f\n", r, k);
++        }
++        return out;
++    }
++
++    void RSP::matrixCommon(const hlslpp::float4x4 &originalMatrix, uint32_t address, uint8_t params) {
++        const float farScale = GetFarPlaneScale();
++        const hlslpp::float4x4 floatMatrix = ((params & projMask) && (params & loadMask) && (farScale > 1.0f))
++            ? extendFarPlane(originalMatrix, farScale) : originalMatrix;
+         // Projection matrix.
+         hlslpp::float4x4 &viewMatrix = viewMatrixStack[projectionMatrixStackSize - 1];
+         hlslpp::float4x4 &projMatrix = projMatrixStack[projectionMatrixStackSize - 1];

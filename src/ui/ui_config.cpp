@@ -371,6 +371,7 @@ struct ControlOptionsContext {
     std::atomic<goemon64::TargetingMode> targeting_mode;
     std::atomic<recomp::BackgroundInputMode> background_input_mode;
     std::atomic<goemon64::AutosaveMode> autosave_mode;
+    std::atomic<goemon64::ViewDistance> view_distance;
     std::atomic<goemon64::CameraInvertMode> camera_invert_mode;
     std::atomic<goemon64::AnalogCamMode> analog_cam_mode;
     std::atomic<goemon64::TouchControlsMode> touch_controls_mode;
@@ -470,6 +471,26 @@ void recomp::set_background_input_mode(recomp::BackgroundInputMode mode) {
             ? "1"
             : "0"
     );
+}
+
+goemon64::ViewDistance goemon64::get_view_distance() {
+    return control_options_context.view_distance;
+}
+
+void goemon64::set_view_distance(goemon64::ViewDistance distance) {
+    control_options_context.view_distance = distance;
+    if (general_model_handle) {
+        general_model_handle.DirtyVariable("view_distance");
+    }
+}
+
+float goemon64::view_distance_scale(goemon64::ViewDistance distance) {
+    switch (distance) {
+    case goemon64::ViewDistance::Far:     return 1.5f;
+    case goemon64::ViewDistance::Farther: return 2.0f;
+    case goemon64::ViewDistance::Max:     return 3.0f;
+    default:                              return 1.0f;
+    }
 }
 
 goemon64::AutosaveMode goemon64::get_autosave_mode() {
@@ -1335,6 +1356,7 @@ public:
         bind_atomic_option(constructor, "targeting_mode", &control_options_context.targeting_mode);
         bind_atomic_option(constructor, "background_input_mode", &control_options_context.background_input_mode);
         bind_atomic_option(constructor, "autosave_mode", &control_options_context.autosave_mode);
+        bind_atomic_option(constructor, "view_distance", &control_options_context.view_distance);
         bind_atomic_option(constructor, "camera_invert_mode", &control_options_context.camera_invert_mode);
         bind_atomic_option(constructor, "analog_cam_mode", &control_options_context.analog_cam_mode);
         bind_atomic_option(constructor, "touch_controls_mode", &control_options_context.touch_controls_mode);

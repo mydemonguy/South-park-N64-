@@ -56,7 +56,7 @@
                                 data-checked="background_input_mode"
                                 value="On"
                                 id="bg_input_enabled"
-                                style="nav-up: #joystick_deadzone_input"
+                                style="nav-up: #joystick_deadzone_input; nav-down: #view_distance_original"
                             />
                             <label class="config-option__tab-label" for="bg_input_enabled">On</label>
 
@@ -68,12 +68,63 @@
                                 data-checked="background_input_mode"
                                 value="Off"
                                 id="bg_input_disabled"
-                                style="nav-up: #joystick_deadzone_input"
+                                style="nav-up: #joystick_deadzone_input; nav-down: #view_distance_original"
                             />
                             <label class="config-option__tab-label" for="bg_input_disabled">Off</label>
                         </div>
                     </div>
 
+
+                    <!-- view distance -->
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(20)" id="conf-general__View-Distance">
+                        <label class="config-option__title">View Distance</label>
+                        <div class="config-option__list">
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(20)"
+                                name="view_distance"
+                                data-checked="view_distance"
+                                value="Original"
+                                id="view_distance_original"
+                                style="nav-up: #bg_input_enabled"
+                            />
+                            <label class="config-option__tab-label" for="view_distance_original">Original</label>
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(20)"
+                                name="view_distance"
+                                data-checked="view_distance"
+                                value="Far"
+                                id="view_distance_far"
+                                style="nav-up: #bg_input_enabled"
+                            />
+                            <label class="config-option__tab-label" for="view_distance_far">Far</label>
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(20)"
+                                name="view_distance"
+                                data-checked="view_distance"
+                                value="Farther"
+                                id="view_distance_farther"
+                                style="nav-up: #bg_input_enabled"
+                            />
+                            <label class="config-option__tab-label" for="view_distance_farther">Farther</label>
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(20)"
+                                name="view_distance"
+                                data-checked="view_distance"
+                                value="Max"
+                                id="view_distance_max"
+                                style="nav-up: #bg_input_enabled"
+                            />
+                            <label class="config-option__tab-label" for="view_distance_max">Max</label>
+                        </div>
+                    </div>
                 </div>
                 <!-- Descriptions -->
                 <div class="config__wrapper">
@@ -82,6 +133,12 @@
                     </p>
                     <p data-if="cur_config_index == 4">
                         Applies a deadzone to joystick inputs.
+                    </p>
+                    <p data-if="cur_config_index == 20">
+                        Draws the world further away before the fog closes in. <b>Original</b> is how far the game itself draws; <b>Far</b>, <b>Farther</b> and <b>Max</b> push the fog and the far edge of the view out 1.5, 2 and 3 times as far.
+                        <br/>
+                        <br/>
+                        The game still decides what it sends to be drawn, so some distant scenery or characters may appear late or not at all, and the world can end in a visible edge. Drawing further also costs some speed.
                     </p>
                     <p data-if="cur_config_index == 5">
                         Allows the game to read controller input when out of focus.
