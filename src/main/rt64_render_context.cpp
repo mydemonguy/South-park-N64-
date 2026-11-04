@@ -33,6 +33,10 @@
 
 // Renderer whose timings the status report prints (see southpark_renderer_timings).
 static std::atomic<RT64::Application*> timing_app{nullptr};
+// The GPU-heavy settings in effect, repeated on every [perf] line: the one-off "[perf] settings"
+// line can fall into the part of a long log the launcher leaves out when sharing it.
+static std::atomic<int> timing_msaa{-1};
+static std::atomic<bool> timing_fbe{true};
 
 static RT64::UserConfiguration::Antialiasing device_max_msaa = RT64::UserConfiguration::Antialiasing::None;
 static bool sample_positions_supported = false;
@@ -272,6 +276,8 @@ void set_application_user_config(RT64::Application* application, const ultramode
             (msaa >= 0 && msaa < 4) ? msaa_names[msaa] : "?", (rr >= 0 && rr < 3) ? rr_names[rr] : "?",
             (config.rr_option == ultramodern::renderer::RefreshRate::Manual) ? (" " + std::to_string(config.rr_manual_value)).c_str() : "",
             (config.fbe_option == ultramodern::renderer::FramebufferEffects::Off) ? "off" : "on");
+        timing_msaa.store(msaa);
+        timing_fbe.store(config.fbe_option != ultramodern::renderer::FramebufferEffects::Off);
         static std::string last;
         if (last != line) {
             last = line;
@@ -486,10 +492,13 @@ extern "C" void southpark_renderer_timings(char* out, size_t size) {
         if (size > 0) out[0] = '\0';
         return;
     }
-    std::snprintf(out, size, "gpu=%.1fms per frame, renderer cpu=%.1fms, display-list parse=%.1fms, frame interval=%.1fms, %.1fx",
+    static const char* const msaa_names[] = { "none", "2x", "4x", "8x" };
+    const int msaa = timing_msaa.load();
+    std::snprintf(out, size, "gpu=%.1fms per frame, renderer cpu=%.1fms, display-list parse=%.1fms, frame interval=%.1fms, %.1fx, MSAA %s, fb effects %s",
         a->workloadQueue->rendererGPUProfiler.average(), a->workloadQueue->workloadProfiler.average(),
         a->state->dlCpuProfiler.average(), a->presentQueue->presentProfiler.average(),
-        double(a->userConfig.resolutionMultiplier));
+        double(a->userConfig.resolutionMultiplier), (msaa >= 0 && msaa < 4) ? msaa_names[msaa] : "?",
+        timing_fbe.load() ? "on" : "off");
 }
 
 namespace southpark::status { void count_gfx_task(); void count_screen_update(); }
