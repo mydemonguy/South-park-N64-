@@ -268,6 +268,13 @@ void set_application_user_config(RT64::Application* application, const ultramode
     // Set here rather than only at startup so the toggle applies without a restart
     // -- update_config() routes every later change through this same function.
     RT64::SetFramebufferSyncEnabled(config.fbe_option != ultramodern::renderer::FramebufferEffects::Off);
+    // Render to RAM goes with it. In that mode the display-list parse draws the frame a
+    // second time on the GPU, waits for it, and copies the result into RDRAM, before the
+    // game is told the frame is done -- so every frame's GPU time lands on the game's own
+    // critical path (on the Adreno 710 the parse took as long as the GPU, 13-28 ms, and the
+    // game fell 13-18% behind while the GPU itself was under budget). With framebuffer
+    // sync off the copy into RDRAM is skipped anyway, so the extra render buys nothing.
+    application->emulatorConfig.framebuffer.renderToRAM = (config.fbe_option != ultramodern::renderer::FramebufferEffects::Off);
 
     // The settings that multiply GPU work, logged when they change (a slow-game report is
     // otherwise unreadable without them).
@@ -604,6 +611,7 @@ bool goemon64::renderer::RT64Context::update_config(const ultramodern::renderer:
     set_application_user_config(app.get(), new_config);
 
     app->updateUserConfig(true);
+    app->updateEmulatorConfig();
 
     if (new_config.msaa_option != old_config.msaa_option) {
         app->updateMultisampling();
