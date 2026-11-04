@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive icon foreground: a snowman inside the 66 dp safe zone. Original artwork. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <g stroke="#5B3A24" stroke-width="2" stroke-linecap="round">
+    <path d="M42 64 L31 56 M34 58 L31 52"/>
+    <path d="M66 64 L77 56 M74 58 L77 52"/>
+  </g>
+  <g stroke="#1E2B40" stroke-width="2" stroke-linejoin="round">
+    <circle cx="54" cy="74" r="14" fill="#FFFFFF"/>
+    <circle cx="54" cy="51" r="10" fill="#FFFFFF"/>
+    <path d="M43 56 Q54 62 65 56 L66 60 Q60 63 61 70 L56 70 L56 63 Q47 63 42 60 Z" fill="#E8483B"/>
+    <rect x="45" y="29" width="18" height="13" rx="1" fill="#1E2B40"/>
+    <rect x="40.5" y="40" width="27" height="3.5" rx="1" fill="#1E2B40"/>
+    <rect x="45" y="36" width="18" height="3" fill="#E8483B"/>
+    <path d="M54 51 L66 53 L54 54.5 Z" fill="#FF8A1F"/>
+  </g>
+  <g fill="#1E2B40"><circle cx="50.5" cy="48" r="1.5"/><circle cx="57.5" cy="48" r="1.5"/><circle cx="54" cy="70" r="1.6"/><circle cx="54" cy="77" r="1.6"/></g>
+</svg>

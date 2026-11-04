@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed (monochrome) icon: the snowman silhouette; Android tints it. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <g fill="#FFFFFF">
+    <circle cx="54" cy="74" r="14"/>
+    <circle cx="54" cy="51" r="10"/>
+    <rect x="45" y="29" width="18" height="13" rx="1"/>
+    <rect x="40.5" y="40" width="27" height="3.5" rx="1"/>
+  </g>
+  <g stroke="#FFFFFF" stroke-width="2.4" stroke-linecap="round">
+    <path d="M42 64 L31 56 M34 58 L31 52"/>
+    <path d="M66 64 L77 56 M74 58 L77 52"/>
+  </g>
+</svg>
