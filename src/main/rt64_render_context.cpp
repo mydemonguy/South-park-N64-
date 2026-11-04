@@ -424,6 +424,14 @@ goemon64::renderer::RT64Context::RT64Context(uint8_t* rdram, ultramodern::render
     // TODO: Fix the underlying issue in RT64 and re-enable GPU copying — it can cause issues in
     // Goemon's Great Adventure's underwater sections (low resolution). Separate configs per game maybe?
     app->emulatorConfig.framebuffer.copyWithGPU = false;
+#if defined(__ANDROID__)
+    // Post-blend dither noise draws every noise-dithered rectangle two or three more
+    // times (add, subtract, and a negative pass). South Park's 2D screens and HUD use
+    // it heavily: the intro menu went from ~170 rectangles to ~370 draws, and on a
+    // tiled phone GPU each draw costs roughly as much again as the pixels it covers.
+    // The effect is a faint grain; the plain dithered colour underneath is unchanged.
+    app->emulatorConfig.dither.postBlendNoise = false;
+#endif
     // Pick an API if the user has set an override.
     switch (cur_config.api_option) {
     case ultramodern::renderer::GraphicsApi::D3D12:

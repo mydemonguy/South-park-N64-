@@ -51,12 +51,62 @@ namespace southpark::status {
             }
         }
 
+        // The Adreno GPU's current clock and load, where the kernel lets an app read
+        // them (many phones do not). Phone GPUs clock down when they look idle, and
+        // RT64 leaves the GPU idle between frames while it waits, so a frame can be
+        // slow because the clock is low rather than because the work is large.
+        std::string gpu_clock_text() {
+#if defined(__ANDROID__)
+            static bool readable = true;
+            if (!readable) {
+                return "";
+            }
+            auto read_first_number = [](const char* path, long long& out) {
+                FILE* f = std::fopen(path, "r");
+                if (f == nullptr) {
+                    return false;
+                }
+                const bool ok = std::fscanf(f, "%lld", &out) == 1;
+                std::fclose(f);
+                return ok;
+            };
+            long long clock = 0, busy = 0, max_clock = 0;
+            const bool have_clock = read_first_number("/sys/class/kgsl/kgsl-3d0/gpuclk", clock);
+            const bool have_busy = read_first_number("/sys/class/kgsl/kgsl-3d0/gpu_busy_percentage", busy);
+            read_first_number("/sys/class/kgsl/kgsl-3d0/max_gpuclk", max_clock);
+            if (!have_clock && !have_busy) {
+                readable = false;
+                return ", gpu clock not readable on this phone";
+            }
+            char text[96];
+            std::snprintf(text, sizeof(text), ", gpu clock %lld of %lld MHz, gpu busy %lld%%",
+                clock / 1000000, max_clock / 1000000, busy);
+            return text;
+#else
+            return "";
+#endif
+        }
+
         void report(uint8_t* rdram, long seconds, bool with_threads) {
             const uint64_t frames = audio_frames.load();
             std::fprintf(stderr, "[status] %lds gfx=%u audio=%u (%llu Hz avg) screen=%u dma=%u vm_pages=%u\n",
                          seconds, gfx_tasks.load(), audio_buffers.load(),
                          (unsigned long long)(seconds > 0 ? frames / (uint64_t)seconds : 0), screen_updates.load(),
                          southpark_dma_count(), southpark_vm_pages_in());
+            // Speed over the last interval, from the sound the game produced: a game
+            // running slow makes less of it per second. Separates "the emulation is
+            // behind" from "the game itself draws at 20 fps here", which looks the same
+            // in the frame interval.
+            {
+                static uint64_t last_frames = 0;
+                static long last_seconds = 0;
+                if (seconds > last_seconds) {
+                    const double hz = double(frames - last_frames) / double(seconds - last_seconds);
+                    std::fprintf(stderr, "[status]   audio now %.0f Hz%s\n", hz, gpu_clock_text().c_str());
+                }
+                last_frames = frames;
+                last_seconds = seconds;
+            }
             char timings[448];
             southpark_renderer_timings(timings, sizeof(timings));
             if (timings[0] != '\0') {
