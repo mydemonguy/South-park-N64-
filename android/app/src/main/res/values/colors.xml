@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="goemon_blue">#1B6CC4</color>
-    <color name="goemon_blue_dark">#0E4A8C</color>
+    <color name="goemon_blue">#FF9F43</color>
+    <color name="goemon_blue_dark">#E07A1F</color>
     <color name="white">#FFFFFFFF</color>
+    <color name="winter_night">#FF0A1428</color>
     <color name="black">#FF000000</color>
 </resources>

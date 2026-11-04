@@ -222,6 +222,7 @@ public:
                 {"LatoLatin-Bold.ttf", false},
                 {"LatoLatin-BoldItalic.ttf", false},
                 {"InterVariable.ttf", false},
+                {"Fredoka.ttf", false},   // rounded display face for titles and menu items (SIL OFL, see Fredoka-OFL.txt)
                 {"NotoEmoji-Regular.ttf", true},
                 {"promptfont/promptfont.ttf", false},
             };

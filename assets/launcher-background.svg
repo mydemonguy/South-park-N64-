@@ -1,11 +1,55 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Original generic artwork for the launcher background: snowy hills at night. -->
+<!-- Original artwork for the launcher background: a snowy mountain town at night. -->
 <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 498.5 461.1">
-  <circle cx="400" cy="90" r="38" fill="#F3F6FA" fill-opacity="0.85"/>
-  <circle cx="90" cy="120" r="6" fill="#F3F6FA"/>
-  <circle cx="190" cy="60" r="5" fill="#F3F6FA"/>
-  <circle cx="300" cy="170" r="4" fill="#F3F6FA"/>
-  <circle cx="140" cy="230" r="5" fill="#F3F6FA"/>
-  <ellipse cx="120" cy="470" rx="300" ry="190" fill="#CDDAEB"/>
-  <ellipse cx="420" cy="500" rx="300" ry="200" fill="#F5F8FC"/>
+  <circle cx="400" cy="80" r="34" fill="#FFF4D6"/>
+  <g fill="#F3F6FA"><circle cx="40" cy="40" r="3"/><circle cx="120" cy="90" r="2.5"/><circle cx="210" cy="30" r="2"/><circle cx="300" cy="70" r="3"/><circle cx="380" cy="150" r="2.5"/><circle cx="450" cy="40" r="2"/><circle cx="90" cy="200" r="2"/><circle cx="260" cy="180" r="2.5"/><circle cx="470" cy="220" r="2"/><circle cx="150" cy="150" r="2"/></g>
+  <path d="M-10 300 L60 190 L100 235 L170 130 L240 230 L290 180 L360 250 L420 175 L510 280 L510 340 L-10 340 Z" fill="#6E8EC6"/>
+  <path d="M60 190 L78 218 L66 213 L57 223 L48 213 L42 218 Z M170 130 L200 173 L184 166 L170 180 L156 166 L141 172 Z
+           M290 180 L310 208 L298 203 L288 212 L279 203 L270 207 Z M420 175 L442 205 L430 200 L420 210 L410 200 L399 204 Z" fill="#EEF4FF"/>
+  <path d="M-10 330 L50 270 L110 310 L170 260 L250 320 L330 270 L410 320 L510 285 L510 380 L-10 380 Z" fill="#4A69A3"/>
+  <path d="M-10 360 Q120 330 250 352 T510 345 L510 470 L-10 470 Z" fill="#CFDDF1"/>
+  <g transform="translate(40,358) scale(0.9)">
+  <rect x="-3" y="0" width="6" height="10" fill="#3B2A22"/>
+  <path d="M0 -60 L22 -18 L-22 -18 Z M0 -40 L28 0 L-28 0 Z" fill="#1F4A45"/>
+  <path d="M0 -60 L8 -45 L3 -47 L0 -42 L-3 -47 L-8 -45 Z M0 -40 L10 -26 L4 -28 L0 -23 L-4 -28 L-10 -26 Z" fill="#EEF4FF"/>
+</g><g transform="translate(455,350) scale(1.0)">
+  <rect x="-3" y="0" width="6" height="10" fill="#3B2A22"/>
+  <path d="M0 -60 L22 -18 L-22 -18 Z M0 -40 L28 0 L-28 0 Z" fill="#1F4A45"/>
+  <path d="M0 -60 L8 -45 L3 -47 L0 -42 L-3 -47 L-8 -45 Z M0 -40 L10 -26 L4 -28 L0 -23 L-4 -28 L-10 -26 Z" fill="#EEF4FF"/>
+</g><g transform="translate(250,345) scale(0.7)">
+  <rect x="-3" y="0" width="6" height="10" fill="#3B2A22"/>
+  <path d="M0 -60 L22 -18 L-22 -18 Z M0 -40 L28 0 L-28 0 Z" fill="#1F4A45"/>
+  <path d="M0 -60 L8 -45 L3 -47 L0 -42 L-3 -47 L-8 -45 Z M0 -40 L10 -26 L4 -28 L0 -23 L-4 -28 L-10 -26 Z" fill="#EEF4FF"/>
+</g>
+  
+<g transform="translate(80,330) scale(0.85)">
+  <rect x="0" y="0" width="60" height="40" fill="#A8502F"/>
+  <rect x="8" y="10" width="16" height="13" rx="1.5" fill="#FFD36A"/>
+  <rect x="34" y="16" width="14" height="24" rx="1.5" fill="#3A1A10"/>
+  <path d="M-8 2 L30 -30 L68 2 Z" fill="#5A2618"/>
+  <path d="M-10 3 Q-9 -2 -4 -3 L30 -33 L64 -3 Q69 -2 70 3 Q60 7 50 3.5 Q40 8 30 4 Q20 8 10 4 Q0 8 -10 3 Z" fill="#F6F9FF"/>
+</g>
+<g transform="translate(170,322) scale(0.7)">
+  <rect x="0" y="0" width="60" height="40" fill="#5C7AA8"/>
+  <rect x="8" y="10" width="16" height="13" rx="1.5" fill="#FFD36A"/>
+  <rect x="34" y="16" width="14" height="24" rx="1.5" fill="#3A1A10"/>
+  <path d="M-8 2 L30 -30 L68 2 Z" fill="#2E4466"/>
+  <path d="M-10 3 Q-9 -2 -4 -3 L30 -33 L64 -3 Q69 -2 70 3 Q60 7 50 3.5 Q40 8 30 4 Q20 8 10 4 Q0 8 -10 3 Z" fill="#F6F9FF"/>
+</g>
+<g transform="translate(300,332) scale(0.9)">
+  <rect x="0" y="0" width="60" height="40" fill="#B9873A"/>
+  <rect x="8" y="10" width="16" height="13" rx="1.5" fill="#FFD36A"/>
+  <rect x="34" y="16" width="14" height="24" rx="1.5" fill="#3A1A10"/>
+  <path d="M-8 2 L30 -30 L68 2 Z" fill="#5E3F18"/>
+  <path d="M-10 3 Q-9 -2 -4 -3 L30 -33 L64 -3 Q69 -2 70 3 Q60 7 50 3.5 Q40 8 30 4 Q20 8 10 4 Q0 8 -10 3 Z" fill="#F6F9FF"/>
+</g>
+<g transform="translate(395,326) scale(0.65)">
+  <rect x="0" y="0" width="60" height="40" fill="#7A4A8C"/>
+  <rect x="8" y="10" width="16" height="13" rx="1.5" fill="#FFD36A"/>
+  <rect x="34" y="16" width="14" height="24" rx="1.5" fill="#3A1A10"/>
+  <path d="M-8 2 L30 -30 L68 2 Z" fill="#3D2346"/>
+  <path d="M-10 3 Q-9 -2 -4 -3 L30 -33 L64 -3 Q69 -2 70 3 Q60 7 50 3.5 Q40 8 30 4 Q20 8 10 4 Q0 8 -10 3 Z" fill="#F6F9FF"/>
+</g>
+  <path d="M-10 372 Q130 355 260 368 T510 362 L510 470 L-10 470 Z" fill="#EEF4FC"/>
+  <circle cx="230" cy="392" r="16" fill="#F9FBFF"/><circle cx="234" cy="396" r="16" fill="#C9D8EE" fill-opacity="0.45"/>
 </svg>

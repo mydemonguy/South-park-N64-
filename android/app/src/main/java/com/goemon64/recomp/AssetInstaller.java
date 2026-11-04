@@ -29,10 +29,13 @@ final class AssetInstaller {
      *         crashes opaquely if they are missing/partial.
      */
     static boolean installIfNeeded(Context ctx, File dataDir) {
+        // The install time is part of the stamp: CI builds all share one versionName, so keyed
+        // on that alone an updated APK kept the previous build's assets (menus, fonts) forever.
         String version;
         try {
-            version = ctx.getPackageManager()
-                    .getPackageInfo(ctx.getPackageName(), 0).versionName;
+            android.content.pm.PackageInfo info = ctx.getPackageManager()
+                    .getPackageInfo(ctx.getPackageName(), 0);
+            version = info.versionName + "@" + info.lastUpdateTime;
         } catch (Exception e) {
             version = "unknown";
         }
