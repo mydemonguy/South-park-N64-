@@ -206,6 +206,11 @@ void set_application_user_config(RT64::Application* application, const ultramode
     // these tiers (see ui_config.cpp downsampling_available) to avoid stacking
     // supersampling on top of an already-large render and blowing past RT64's
     // ResolutionMultiplierLimit, so no ds_option factor is applied here.
+    case ultramodern::renderer::Resolution::Original2_5x:
+        application->userConfig.resolution = RT64::UserConfiguration::Resolution::Manual;
+        application->userConfig.resolutionMultiplier = 2.5;
+        application->userConfig.downsampleMultiplier = 1;
+        break;
     case ultramodern::renderer::Resolution::Original3x:
         application->userConfig.resolution = RT64::UserConfiguration::Resolution::Manual;
         application->userConfig.resolutionMultiplier = 3.0;
@@ -271,7 +276,7 @@ void set_application_user_config(RT64::Application* application, const ultramode
         static const char* const rr_names[] = { "Original", "Display (interpolated)", "Manual" };
         const int msaa = int(config.msaa_option), rr = int(config.rr_option);
         char line[200];
-        std::snprintf(line, sizeof(line), "[perf] settings: resolution %.0fx (downsample %dx), MSAA %s, framerate %s%s, framebuffer effects %s\n",
+        std::snprintf(line, sizeof(line), "[perf] settings: resolution %gx (downsample %dx), MSAA %s, framerate %s%s, framebuffer effects %s\n",
             double(application->userConfig.resolutionMultiplier), int(application->userConfig.downsampleMultiplier),
             (msaa >= 0 && msaa < 4) ? msaa_names[msaa] : "?", (rr >= 0 && rr < 3) ? rr_names[rr] : "?",
             (config.rr_option == ultramodern::renderer::RefreshRate::Manual) ? (" " + std::to_string(config.rr_manual_value)).c_str() : "",
@@ -494,11 +499,23 @@ extern "C" void southpark_renderer_timings(char* out, size_t size) {
     }
     static const char* const msaa_names[] = { "none", "2x", "4x", "8x" };
     const int msaa = timing_msaa.load();
-    std::snprintf(out, size, "gpu=%.1fms per frame, renderer cpu=%.1fms, display-list parse=%.1fms, frame interval=%.1fms, %.1fx, MSAA %s, fb effects %s",
+    std::snprintf(out, size, "gpu=%.1fms per frame, renderer cpu=%.1fms, display-list parse=%.1fms, frame interval=%.1fms, %gx, MSAA %s, fb effects %s",
         a->workloadQueue->rendererGPUProfiler.average(), a->workloadQueue->workloadProfiler.average(),
         a->state->dlCpuProfiler.average(), a->presentQueue->presentProfiler.average(),
         double(a->userConfig.resolutionMultiplier), (msaa >= 0 && msaa < 4) ? msaa_names[msaa] : "?",
         timing_fbe.load() ? "on" : "off");
+
+    // Render passes per frame since the previous report (see RT64::RenderCounters).
+    static RT64::RenderCounters last_counters{};
+    const RT64::RenderCounters now = RT64::GetRenderCounters();
+    const unsigned long long frames = now.workloads - last_counters.workloads;
+    if (frames > 0) {
+        const size_t used = std::strlen(out);
+        std::snprintf(out + used, size - used, ", per frame: %.1f framebuffer pairs, %.1f depth switches",
+            double(now.framebufferPairs - last_counters.framebufferPairs) / double(frames),
+            double(now.depthSwitches - last_counters.depthSwitches) / double(frames));
+    }
+    last_counters = now;
 }
 
 namespace southpark::status { void count_gfx_task(); void count_screen_update(); }

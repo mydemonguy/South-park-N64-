@@ -35,6 +35,17 @@
                                 data-event-focus="set_cur_config_index(0)"
                                 name="resolution"
                                 data-checked="res_option"
+                                value="Original2_5x"
+                                id="res_2_5x"
+                                style="nav-up:#tab_graphics; nav-down: #ar_expand"
+                                data-style-nav-down="(res_option == 'Original' || res_option == 'Original2x') ? '#ds_4x' : '#ar_expand'"
+                            />
+                            <label class="config-option__tab-label" for="res_2_5x">2.5x</label>
+                            <input type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(0)"
+                                name="resolution"
+                                data-checked="res_option"
                                 value="Original3x"
                                 id="res_3x"
                                 style="nav-up:#tab_graphics; nav-down: #ar_expand"
@@ -52,28 +63,6 @@
                                 data-style-nav-down="(res_option == 'Original' || res_option == 'Original2x') ? '#ds_4x' : '#ar_expand'"
                             />
                             <label class="config-option__tab-label" for="res_4x">4x</label>
-                            <input type="radio"
-                                data-event-blur="set_cur_config_index(-1)"
-                                data-event-focus="set_cur_config_index(0)"
-                                name="resolution"
-                                data-checked="res_option"
-                                value="Original6x"
-                                id="res_6x"
-                                style="nav-up:#tab_graphics; nav-down: #ar_expand"
-                                data-style-nav-down="(res_option == 'Original' || res_option == 'Original2x') ? '#ds_4x' : '#ar_expand'"
-                            />
-                            <label class="config-option__tab-label" for="res_6x">6x</label>
-                            <input type="radio"
-                                data-event-blur="set_cur_config_index(-1)"
-                                data-event-focus="set_cur_config_index(0)"
-                                name="resolution"
-                                data-checked="res_option"
-                                value="Original8x"
-                                id="res_8x"
-                                style="nav-up:#tab_graphics; nav-down: #ar_expand"
-                                data-style-nav-down="(res_option == 'Original' || res_option == 'Original2x') ? '#ds_4x' : '#ar_expand'"
-                            />
-                            <label class="config-option__tab-label" for="res_8x">8x</label>
                             <input type="radio"
                                 data-event-blur="set_cur_config_index(-1)"
                                 data-event-focus="set_cur_config_index(0)"

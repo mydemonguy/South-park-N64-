@@ -1,0 +1,88 @@
+diff --git a/src/common/rt64_device_workarounds.cpp b/src/common/rt64_device_workarounds.cpp
+index 3cfd56b..2fa273c 100644
+--- a/src/common/rt64_device_workarounds.cpp
++++ b/src/common/rt64_device_workarounds.cpp
+@@ -63,4 +63,22 @@ namespace RT64 {
+     bool GetUbershadersEnabled() {
+         return ubershadersEnabled.load(std::memory_order_relaxed);
+     }
++
++    static std::atomic<unsigned long long> counterWorkloads = 0;
++    static std::atomic<unsigned long long> counterFramebufferPairs = 0;
++    static std::atomic<unsigned long long> counterDepthSwitches = 0;
++
++    void CountWorkload(unsigned int framebufferPairs) {
++        counterWorkloads.fetch_add(1, std::memory_order_relaxed);
++        counterFramebufferPairs.fetch_add(framebufferPairs, std::memory_order_relaxed);
++    }
++
++    void CountDepthSwitch() {
++        counterDepthSwitches.fetch_add(1, std::memory_order_relaxed);
++    }
++
++    RenderCounters GetRenderCounters() {
++        return { counterWorkloads.load(std::memory_order_relaxed), counterFramebufferPairs.load(std::memory_order_relaxed),
++            counterDepthSwitches.load(std::memory_order_relaxed) };
++    }
+ };
+diff --git a/src/common/rt64_device_workarounds.h b/src/common/rt64_device_workarounds.h
+index 3889464..df7e141 100644
+--- a/src/common/rt64_device_workarounds.h
++++ b/src/common/rt64_device_workarounds.h
+@@ -45,4 +45,18 @@ namespace RT64 {
+     // (it appears once its shader has compiled, usually within a few frames).
+     void SetUbershadersEnabled(bool enabled);
+     bool GetUbershadersEnabled();
++
++    // Diagnostics: running totals the host divides by the number of frames to report
++    // per-frame figures. A depth switch flips the depth buffer between writable and
++    // read-only (for decal draws), which ends the render pass; on a tiled GPU every
++    // pass end writes the whole colour and depth target out to memory and the next
++    // pass reads it back, so this count is what makes high resolutions expensive there.
++    struct RenderCounters {
++        unsigned long long workloads;
++        unsigned long long framebufferPairs;
++        unsigned long long depthSwitches;
++    };
++    void CountWorkload(unsigned int framebufferPairs);
++    void CountDepthSwitch();
++    RenderCounters GetRenderCounters();
+ };
+diff --git a/src/contrib/plume b/src/contrib/plume
+--- a/src/contrib/plume
++++ b/src/contrib/plume
+@@ -1 +1 @@
+-Subproject commit e12bec2f14d67245dc388fa6926148bfef149142
++Subproject commit e12bec2f14d67245dc388fa6926148bfef149142-dirty
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+index 3f11f59..156c0ee 100644
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -4,6 +4,7 @@
+ 
+ #include "rt64_workload_queue.h"
+ 
++#include "common/rt64_device_workarounds.h"
+ #include "common/rt64_thread.h"
+ 
+ #include "rt64_present_queue.h"
+@@ -850,6 +851,7 @@ namespace RT64 {
+             queryPool->queryResults();
+             const uint64_t *frameTimestamps = queryPool->getResults();
+             rendererGPUProfiler.log(double(frameTimestamps[1] - frameTimestamps[0]) / 1000000.0);
++            CountWorkload(workload.fbPairCount);
+ 
+             // Indicate to the texture cache it's safe to delete the textures if no locks are active.
+             ext.textureCache->decrementLock();
+diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
+index e9a7e60..f305d4e 100644
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -494,6 +494,7 @@ namespace RT64 {
+         worker->commandList->barriers(RenderBarrierStage::GRAPHICS, RenderTextureBarrier(fbStorage->depthTarget->texture.get(), readOnly ? depthReadState : RenderTextureLayout::DEPTH_WRITE));
+         worker->commandList->setFramebuffer(renderFramebuffer);
+         depthState = readOnly;
++        CountDepthSwitch();
+         return true;
+     }
+     

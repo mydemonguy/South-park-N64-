@@ -57,7 +57,7 @@ namespace southpark::status {
                          seconds, gfx_tasks.load(), audio_buffers.load(),
                          (unsigned long long)(seconds > 0 ? frames / (uint64_t)seconds : 0), screen_updates.load(),
                          southpark_dma_count(), southpark_vm_pages_in());
-            char timings[192];
+            char timings[320];
             southpark_renderer_timings(timings, sizeof(timings));
             if (timings[0] != '\0') {
                 std::fprintf(stderr, "[perf] %s\n", timings);

@@ -1,0 +1,22 @@
+diff --git a/ultramodern/include/ultramodern/config.hpp b/ultramodern/include/ultramodern/config.hpp
+index 3a9e993..e9b7195 100644
+--- a/ultramodern/include/ultramodern/config.hpp
++++ b/ultramodern/include/ultramodern/config.hpp
+@@ -11,6 +11,9 @@ namespace ultramodern {
+         enum class Resolution {
+             Original,
+             Original2x,
++            // Between 2x and 3x for phones, where 3x is the screen's full resolution. Configs
++            // store the option's name, so adding one here does not shift saved values.
++            Original2_5x,
+             Original3x,
+             Original4x,
+             Original6x,
+@@ -98,6 +101,7 @@ namespace ultramodern {
+         NLOHMANN_JSON_SERIALIZE_ENUM(ultramodern::renderer::Resolution, {
+             {ultramodern::renderer::Resolution::Original, "Original"},
+             {ultramodern::renderer::Resolution::Original2x, "Original2x"},
++            {ultramodern::renderer::Resolution::Original2_5x, "Original2_5x"},
+             {ultramodern::renderer::Resolution::Original3x, "Original3x"},
+             {ultramodern::renderer::Resolution::Original4x, "Original4x"},
+             {ultramodern::renderer::Resolution::Original6x, "Original6x"},

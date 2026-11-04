@@ -33,7 +33,10 @@ constexpr std::u8string_view sound_filename = u8"sound.json";
 // from_or_default applies this only when the JSON key is absent, so existing users
 // keep their saved value.
 #if defined(__ANDROID__)
-constexpr auto res_default            = ultramodern::renderer::Resolution::Original4x;
+// South Park draws a 480x360 frame, 1.5x the 320x240 the 4x figure above was measured
+// with, and 3x of it already fills a 1080p phone screen once widescreen widens it: 4x
+// ran well under full speed on an Adreno 710, 3x just short of it. 2.5x keeps it smooth.
+constexpr auto res_default            = ultramodern::renderer::Resolution::Original2_5x;
 #else
 constexpr auto res_default            = ultramodern::renderer::Resolution::Auto;
 #endif
