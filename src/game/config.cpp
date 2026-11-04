@@ -303,7 +303,9 @@ void set_general_settings_from_json(const nlohmann::json& config_json) {
     recomp::set_joystick_deadzone(from_or_default(config_json, "joystick_deadzone", 5));
     goemon64::set_autosave_mode(from_or_default(config_json, "autosave_mode", goemon64::AutosaveMode::Off));
     goemon64::set_camera_invert_mode(from_or_default(config_json, "camera_invert_mode", goemon64::CameraInvertMode::InvertY));
-    goemon64::set_analog_cam_mode(from_or_default(config_json, "analog_cam_mode", goemon64::AnalogCamMode::Off));
+    // The analog camera was a Goemon feature and has no menu entry any more: keep it off even if an
+    // older config saved it as on (it silences the right stick's R mapping while active).
+    goemon64::set_analog_cam_mode(goemon64::AnalogCamMode::Off);
     goemon64::set_touch_controls_mode(from_or_default(config_json, "touch_controls_mode", goemon64::TouchControlsMode::Auto));
     // 50 rather than 100: a linear stick is measurably too twitchy to walk with on a
     // phone-sized overlay, so the shipped default already bends the response.
