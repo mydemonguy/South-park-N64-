@@ -56,7 +56,7 @@
                                 data-checked="background_input_mode"
                                 value="On"
                                 id="bg_input_enabled"
-                                style="nav-up: #joystick_deadzone_input; nav-down: #swap_moving_enabled"
+                                style="nav-up: #joystick_deadzone_input"
                             />
                             <label class="config-option__tab-label" for="bg_input_enabled">On</label>
 
@@ -68,121 +68,17 @@
                                 data-checked="background_input_mode"
                                 value="Off"
                                 id="bg_input_disabled"
-                                style="nav-up: #joystick_deadzone_input; nav-down: #swap_moving_disabled"
+                                style="nav-up: #joystick_deadzone_input"
                             />
                             <label class="config-option__tab-label" for="bg_input_disabled">Off</label>
                         </div>
                     </div>
 
-                    <!-- character swapping while moving -->
-                    <div class="config-option" data-event-mouseover="set_cur_config_index(12)" id="conf-general__Swap-While-Moving">
-                        <label class="config-option__title">Swap Characters While Moving</label>
-                        <div class="config-option__list">
-                            <input
-                                type="radio"
-                                data-event-blur="set_cur_config_index(-1)"
-                                data-event-focus="set_cur_config_index(12)"
-                                name="swap_while_moving_mode"
-                                data-checked="swap_while_moving_mode"
-                                value="On"
-                                id="swap_moving_enabled"
-                                style="nav-up: #bg_input_enabled; nav-down: #attack_moving_enabled"
-                            />
-                            <label class="config-option__tab-label" for="swap_moving_enabled">On</label>
-
-                            <input
-                                type="radio"
-                                data-event-blur="set_cur_config_index(-1)"
-                                data-event-focus="set_cur_config_index(12)"
-                                name="swap_while_moving_mode"
-                                data-checked="swap_while_moving_mode"
-                                value="Off"
-                                id="swap_moving_disabled"
-                                style="nav-up: #bg_input_disabled; nav-down: #attack_moving_enabled"
-                            />
-                            <label class="config-option__tab-label" for="swap_moving_disabled">Off</label>
-                        </div>
-                    </div>
-
-                    <!-- attacking while moving -->
-                    <div class="config-option" data-event-mouseover="set_cur_config_index(13)" id="conf-general__Attack-While-Moving">
-                        <label class="config-option__title">Attack While Moving</label>
-                        <div class="config-option__list">
-                            <input
-                                type="radio"
-                                data-event-blur="set_cur_config_index(-1)"
-                                data-event-focus="set_cur_config_index(13)"
-                                name="attack_while_moving_mode"
-                                data-checked="attack_while_moving_mode"
-                                value="On"
-                                id="attack_moving_enabled"
-                                style="nav-up: #swap_moving_enabled; nav-down: #autosave_enabled"
-                            />
-                            <label class="config-option__tab-label" for="attack_moving_enabled">On</label>
-
-                            <input
-                                type="radio"
-                                data-event-blur="set_cur_config_index(-1)"
-                                data-event-focus="set_cur_config_index(13)"
-                                name="attack_while_moving_mode"
-                                data-checked="attack_while_moving_mode"
-                                value="Off"
-                                id="attack_moving_disabled"
-                                style="nav-up: #swap_moving_enabled; nav-down: #autosave_enabled"
-                            />
-                            <label class="config-option__tab-label" for="attack_moving_disabled">Off</label>
-                        </div>
-                    </div>
-
-                    <!-- autosave -->
-                    <div class="config-option" data-event-mouseover="set_cur_config_index(6)" id="conf-general__Autosave">
-                        <label class="config-option__title">Autosave</label>
-                        <div class="config-option__list">
-                            <input
-                                type="radio"
-                                data-event-blur="set_cur_config_index(-1)"
-                                data-event-focus="set_cur_config_index(6)"
-                                name="autosave_mode"
-                                data-checked="autosave_mode"
-                                value="On"
-                                id="autosave_enabled"
-                                style="nav-up: #attack_moving_enabled"
-                            />
-                            <label class="config-option__tab-label" for="autosave_enabled">On</label>
-
-                            <input
-                                type="radio"
-                                data-event-blur="set_cur_config_index(-1)"
-                                data-event-focus="set_cur_config_index(6)"
-                                name="autosave_mode"
-                                data-checked="autosave_mode"
-                                value="Off"
-                                id="autosave_disabled"
-                                style="nav-up: #attack_moving_enabled"
-                            />
-                            <label class="config-option__tab-label" for="autosave_disabled">Off</label>
-                        </div>
-                    </div>
                 </div>
                 <!-- Descriptions -->
                 <div class="config__wrapper">
-                    <p data-if="cur_config_index == 0">
-                        Controls how targeting enemies and objects works. <b>Switch</b> will start or stop targeting each time the target button is pressed. <b>Hold</b> will start when the target button is pressed and stop when the button is released. 
-                    </p>
                     <p data-if="cur_config_index == 1">
                         Controls the strength of rumble when using a controller that supports it. <b>Setting this to zero will disable rumble.</b>
-                    </p>
-                    <p data-if="cur_config_index == 2">
-                        Controls the sensitivity of gyro aiming when using items in first person for controllers that support it. <b>Setting this to zero will disable gyro.</b>
-                        <br />
-                        <br />
-                        <b>Note: To recalibrate controller gyro, set the controller down on a still, flat surface for 5 seconds.</b>
-                    </p>
-                    <p data-if="cur_config_index == 3">
-                        Controls the sensitivity of mouse aiming when using items in first person. <b>Setting this to zero will disable mouse aiming.</b>
-                        <br />
-                        <br />
-                        <b>Note: This option does not allow mouse buttons to activate items. Mouse aiming is intended to be used with inputs that are mapped to mouse movement, such as gyro on Steam Deck.</b>
                     </p>
                     <p data-if="cur_config_index == 4">
                         Applies a deadzone to joystick inputs.
@@ -191,36 +87,6 @@
                         Allows the game to read controller input when out of focus.
                         <br/>
                         <b>This setting does not affect keyboard input.</b>
-                    </p>
-                    <p data-if="cur_config_index == 6">
-                        Saves your progress automatically, using the game's own save system. An autosave is an ordinary save: loading one starts you where a save made at that point normally would.
-                        <br/>
-                        <br/>
-                        While this is on, your progress is saved <b>every 2 minutes</b>, and only when something has actually changed. You can also press <b>L + R + Z</b> during normal gameplay to save immediately.
-                        <br/>
-                        <br/>
-                        Saving is only allowed when the game itself would let you pause, so it will not happen <b>inside inns</b>, during dialogue or cutscenes, while a menu is open, or during area loads. It also waits for your stats and progress to stop changing, so it will briefly decline right after taking damage, spending money, or changing rooms.
-                        <br/>
-                        <br/>
-                        <b>This writes to your existing save file, overwriting it. Back it up before enabling.</b>
-                    </p>
-                    <p data-if="cur_config_index == 7">
-                        Inverts the camera controls for first-person aiming. <b>Invert Y</b> is the default and matches the original game.
-                    </p>
-                    <p data-if="cur_config_index == 12">
-                        Lets you start a character swap (C-Down) while walking or running, instead of only from a standstill.
-                        <br/>
-                        <br/>
-                        <b>The swap itself is not faster.</b> Changing character reloads the new character's model from the game data, which takes about a second of locked input either way — this only removes the need to stop first.
-                        <br/>
-                        <br/>
-                        Swapping stays blocked while attacking, jumping, climbing, swimming, or riding, where a mid-action swap would leave the game in an inconsistent state. While this is on, C-Down also swaps once per press rather than repeating while held.
-                    </p>
-                    <p data-if="cur_config_index == 13">
-                        Lets you keep moving during a ground attack instead of rooting in place. You lunge in the direction you were last running.
-                        <br/>
-                        <br/>
-                        <b>This is a novelty toggle.</b> The attack animation stays planted while you glide along, so the character appears to slide during the swing. Normal movement resumes the moment the attack ends.
                     </p>
                 </div>
             </div>

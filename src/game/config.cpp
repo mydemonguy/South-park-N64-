@@ -301,7 +301,9 @@ void set_general_settings_from_json(const nlohmann::json& config_json) {
     recomp::set_gyro_sensitivity(from_or_default(config_json, "gyro_sensitivity", 50));
     recomp::set_mouse_sensitivity(from_or_default(config_json, "mouse_sensitivity", is_steam_deck ? 50 : 0));
     recomp::set_joystick_deadzone(from_or_default(config_json, "joystick_deadzone", 5));
-    goemon64::set_autosave_mode(from_or_default(config_json, "autosave_mode", goemon64::AutosaveMode::Off));
+    // Autosave, swap/attack while moving and the cheats were Goemon features with no menu
+    // entries any more: force them off even if an older config saved them as on.
+    goemon64::set_autosave_mode(goemon64::AutosaveMode::Off);
     goemon64::set_camera_invert_mode(from_or_default(config_json, "camera_invert_mode", goemon64::CameraInvertMode::InvertY));
     // The analog camera was a Goemon feature and has no menu entry any more: keep it off even if an
     // older config saved it as on (it silences the right stick's R mapping while active).
@@ -313,11 +315,11 @@ void set_general_settings_from_json(const nlohmann::json& config_json) {
     goemon64::set_analog_camera_invert_mode(from_or_default(config_json, "analog_camera_invert_mode", goemon64::CameraInvertMode::InvertNone));
     goemon64::set_analog_cam_sensitivity_x(from_or_default(config_json, "analog_cam_sensitivity_x", 50));
     goemon64::set_analog_cam_sensitivity_y(from_or_default(config_json, "analog_cam_sensitivity_y", 50));
-    goemon64::set_swap_while_moving_mode(from_or_default(config_json, "swap_while_moving_mode", goemon64::SwapWhileMovingMode::Off));
-    goemon64::set_attack_while_moving_mode(from_or_default(config_json, "attack_while_moving_mode", goemon64::AttackWhileMovingMode::Off));
-    goemon64::set_infinite_health_mode(from_or_default(config_json, "infinite_health_mode", goemon64::CheatMode::Off));
-    goemon64::set_infinite_money_mode(from_or_default(config_json, "infinite_money_mode", goemon64::CheatMode::Off));
-    goemon64::set_infinite_lives_mode(from_or_default(config_json, "infinite_lives_mode", goemon64::CheatMode::Off));
+    goemon64::set_swap_while_moving_mode(goemon64::SwapWhileMovingMode::Off);
+    goemon64::set_attack_while_moving_mode(goemon64::AttackWhileMovingMode::Off);
+    goemon64::set_infinite_health_mode(goemon64::CheatMode::Off);
+    goemon64::set_infinite_money_mode(goemon64::CheatMode::Off);
+    goemon64::set_infinite_lives_mode(goemon64::CheatMode::Off);
     goemon64::set_debug_mode_enabled(from_or_default(config_json, "debug_mode", false));
 }
 

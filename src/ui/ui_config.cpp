@@ -41,16 +41,15 @@ int recompui::config_tab_to_index(recompui::ConfigTab tab) {
         return 3;
     case recompui::ConfigTab::Mods:
         return 4;
+    // The Saves (a save importer) and Cheats tabs were Goemon features and were
+    // removed from the menu; the tabs after them moved up.
     case recompui::ConfigTab::Cheats:
-        return 5;
-    // The Saves tab (a Goemon save importer) was removed from the menu; the tabs
-    // after it moved up one place.
     case recompui::ConfigTab::Saves:
         return 0;
     case recompui::ConfigTab::Debug:
-        return 6;
+        return 5;
     case recompui::ConfigTab::Driver:
-        return 7;
+        return 6;
     default:
         assert(false && "Unknown config tab.");
         return 0;
