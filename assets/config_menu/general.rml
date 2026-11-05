@@ -138,7 +138,7 @@
                         Draws the world further away before the fog closes in. <b>Original</b> is how far the game itself draws; <b>Far</b>, <b>Farther</b> and <b>Max</b> push the fog and the far edge of the view out 1.5, 2 and 3 times as far.
                         <br/>
                         <br/>
-                        The game still decides what it sends to be drawn, so some distant scenery or characters may appear late or not at all, and the world can end in a visible edge. Drawing further also costs some speed.
+                        Scenery, characters and objects are kept out to the new distance too, instead of popping in or fading out where they used to. Some areas may still end in a visible edge where the level itself stops. Drawing further costs some speed.
                     </p>
                     <p data-if="cur_config_index == 5">
                         Allows the game to read controller input when out of focus.

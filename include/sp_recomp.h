@@ -54,4 +54,12 @@ extern "C"
 #endif
 void southpark_sched_trace(uint8_t* rdram, recomp_context* ctx);
 
+// View Distance setting (southpark.us.toml [[patches.hook]], src/ui/ui_config.cpp): the
+// factor the game's own draw distance (camera +0x4F0) is multiplied by where it is used
+// for drawing -- 1.0 for Original.
+#ifdef __cplusplus
+extern "C"
+#endif
+float southpark_view_distance_scale(void);
+
 #endif

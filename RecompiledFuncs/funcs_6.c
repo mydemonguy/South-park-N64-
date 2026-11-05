@@ -26380,6 +26380,7 @@ L_00253438:
     ctx->r4 = MEM_B(ctx->r2, 0X5);
     // 0x00253444: lwc1        $f2, 0x4F0($fp)
     ctx->f2.u32l = MEM_W(ctx->r30, 0X4F0);
+    ctx->f2.fl *= southpark_view_distance_scale();
     // 0x00253448: beq         $a0, $v1, L_002534EC
     if (ctx->r4 == ctx->r3) {
         // 0x0025344C: slti        $v0, $a0, 0x2
@@ -53045,6 +53046,7 @@ L_0025BEE8:
     ctx->f0.fl = ctx->f25.fl - ctx->f0.fl;
     // 0x0025BFA8: addiu       $a1, $s3, 0x54
     ctx->r5 = ADD32(ctx->r19, 0X54);
+    ctx->f1.fl *= southpark_view_distance_scale();
     // 0x0025BFAC: swc1        $f1, 0x14($sp)
     MEM_W(0X14, ctx->r29) = ctx->f_odd[(1 - 1) * 2];
     // 0x0025BFB0: jal         0x0029A3E4
@@ -53445,6 +53447,7 @@ L_0025C114:
     ctx->f12.fl = ctx->f21.fl;
     // 0x0025C180: lwc1        $f23, 0x4F0($s3)
     ctx->f_odd[(23 - 1) * 2] = MEM_W(ctx->r19, 0X4F0);
+    ctx->f23.fl *= southpark_view_distance_scale();
     // 0x0025C184: mul.s       $f22, $f24, $f22
     CHECK_FR(ctx, 22);
     CHECK_FR(ctx, 24);
@@ -53475,6 +53478,7 @@ L_0025C114:
     after_75:
     // 0x0025C19C: lwc1        $f20, 0x4F0($s3)
     ctx->f20.u32l = MEM_W(ctx->r19, 0X4F0);
+    ctx->f20.fl *= southpark_view_distance_scale();
     // 0x0025C1A0: div.s       $f20, $f20, $f0
     CHECK_FR(ctx, 20);
     CHECK_FR(ctx, 20);
@@ -53553,6 +53557,7 @@ L_0025C114:
     MEM_W(0X408, ctx->r29) = ctx->f_odd[(21 - 1) * 2];
     // 0x0025C1E8: lwc1        $f0, 0x4F0($s3)
     ctx->f0.u32l = MEM_W(ctx->r19, 0X4F0);
+    ctx->f0.fl *= southpark_view_distance_scale();
     // 0x0025C1EC: neg.s       $f2, $f1
     CHECK_FR(ctx, 2);
     CHECK_FR(ctx, 1);

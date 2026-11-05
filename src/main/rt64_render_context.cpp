@@ -549,8 +549,9 @@ void southpark_android_frame_done();
 
 void goemon64::renderer::RT64Context::send_dl(const OSTask* task) {
     southpark::status::count_gfx_task();
-    // Read per frame rather than pushed: the setting is live in the General tab.
-    RT64::SetFarPlaneScale(goemon64::view_distance_scale(goemon64::get_view_distance()));
+    // View Distance is applied by the game itself now (hooks in southpark.us.toml scale its
+    // projection, culling and fade together), so RT64 must not stretch the far plane again.
+    RT64::SetFarPlaneScale(1.0f);
 #if defined(__ANDROID__)
     southpark_android_frame_done();
 #endif

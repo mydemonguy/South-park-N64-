@@ -146,3 +146,35 @@ text = "if (southpark_sched_guard(rdram, ctx, 1)) return;"
 [[patches.hook]]
 func = "func_00258F40"
 text = "southpark_sched_trace(rdram, ctx);"
+
+# View Distance (General tab). The camera keeps the current area's draw distance at
+# +0x4F0 (blended between areas by func_0025AFD4). Scale it where it is used for drawing
+# only -- other readers (func_0023EE60, func_00271808) keep the game's own value:
+# the far plane of the world projection (guPerspectiveF's `far` argument, stored at 0x14($sp)).
+[[patches.hook]]
+func = "func_0025B68C"
+before_vram = 0x0025BFAC
+text = "ctx->f1.fl *= southpark_view_distance_scale();"
+
+# The radius of the box of level blocks gathered around the camera (+0x348..+0x354).
+[[patches.hook]]
+func = "func_0025B68C"
+before_vram = 0x0025C184
+text = "ctx->f23.fl *= southpark_view_distance_scale();"
+
+# The culling frustum: the width/height of its far end, then its depth.
+[[patches.hook]]
+func = "func_0025B68C"
+before_vram = 0x0025C1A0
+text = "ctx->f20.fl *= southpark_view_distance_scale();"
+
+[[patches.hook]]
+func = "func_0025B68C"
+before_vram = 0x0025C1EC
+text = "ctx->f0.fl *= southpark_view_distance_scale();"
+
+# Objects fade out as their depth nears the draw distance.
+[[patches.hook]]
+func = "func_00252870"
+before_vram = 0x00253448
+text = "ctx->f2.fl *= southpark_view_distance_scale();"

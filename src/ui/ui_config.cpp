@@ -493,6 +493,18 @@ float goemon64::view_distance_scale(goemon64::ViewDistance distance) {
     }
 }
 
+// Called from the game's camera and object-fade code (hooks in southpark.us.toml), once
+// per frame per use, so the setting is live. Logged when it changes so a session log
+// shows which distance was in use.
+extern "C" float southpark_view_distance_scale(void) {
+    const float scale = goemon64::view_distance_scale(goemon64::get_view_distance());
+    static std::atomic<float> logged{ 0.0f };
+    if (logged.exchange(scale, std::memory_order_relaxed) != scale) {
+        std::fprintf(stderr, "[view] draw distance x%.1f\n", double(scale));
+    }
+    return scale;
+}
+
 goemon64::AutosaveMode goemon64::get_autosave_mode() {
     return control_options_context.autosave_mode;
 }
