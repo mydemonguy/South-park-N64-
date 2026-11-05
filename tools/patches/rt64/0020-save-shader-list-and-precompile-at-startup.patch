@@ -1,0 +1,144 @@
+diff --git a/src/render/rt64_raster_shader_cache.cpp b/src/render/rt64_raster_shader_cache.cpp
+index bf7b669..14311cb 100644
+--- a/src/render/rt64_raster_shader_cache.cpp
++++ b/src/render/rt64_raster_shader_cache.cpp
+@@ -8,6 +8,13 @@
+ 
+ #define ENABLE_OPTIMIZED_SHADER_GENERATION
+ 
++#include <cstdio>
++#include <cstring>
++#include <vector>
++
++// Most a saved shader list holds (a game uses a few hundred to a couple of thousand).
++static const uint32_t ShaderListMaxEntries = 8192;
++
+ namespace RT64 {
+     // RasterShaderCache::CompilationThread
+     
+@@ -123,6 +130,13 @@ namespace RT64 {
+             }
+ 
+             found = true;
++
++            // A shader seen for the first time is added to the saved list (see loadShaderList).
++            if (shaderListStream.is_open() && (shaderListEntries < ShaderListMaxEntries)) {
++                shaderListStream.write(reinterpret_cast<const char *>(&desc), sizeof(ShaderDescription));
++                shaderListStream.flush();
++                shaderListEntries++;
++            }
+         }
+ 
+         // Push a new shader compilation to the queue.
+@@ -134,6 +148,84 @@ namespace RT64 {
+         descQueueChanged.notify_all();
+     }
+     
++    // File layout: magic, format version, sizeof(ShaderDescription), then raw descriptions in the
++    // order they were first used. A file from a different layout is discarded and started over.
++    static const char ShaderListMagic[8] = { 'R', 'T', '6', '4', 'S', 'L', 'S', 'T' };
++    static const uint32_t ShaderListVersion = 1;
++
++    void RasterShaderCache::loadShaderList(const std::filesystem::path &path) {
++        std::vector<ShaderDescription> descriptions;
++        {
++            std::ifstream input(path, std::ios::binary);
++            char magic[8] = {};
++            uint32_t version = 0, descSize = 0;
++            if (input.read(magic, sizeof(magic)) && input.read(reinterpret_cast<char *>(&version), sizeof(version)) &&
++                input.read(reinterpret_cast<char *>(&descSize), sizeof(descSize)) &&
++                (std::memcmp(magic, ShaderListMagic, sizeof(magic)) == 0) && (version == ShaderListVersion) &&
++                (descSize == sizeof(ShaderDescription)))
++            {
++                ShaderDescription desc;
++                while ((descriptions.size() < ShaderListMaxEntries) && input.read(reinterpret_cast<char *>(&desc), sizeof(desc))) {
++                    descriptions.push_back(desc);
++                }
++            }
++        }
++
++        {
++            std::unique_lock<std::mutex> queueLock(submissionMutex);
++            shaderListPath = path;
++            shaderListEntries = 0;
++            // Rewrite the file with the entries that were read (drops a torn last entry or an
++            // incompatible file), then keep it open for appending.
++            std::error_code ec;
++            std::filesystem::create_directories(path.parent_path(), ec);
++            if (shaderListStream.is_open()) {
++                shaderListStream.close();
++            }
++
++            shaderListStream.clear();
++            shaderListStream.open(path, std::ios::binary | std::ios::trunc);
++            if (shaderListStream.is_open()) {
++                shaderListStream.write(ShaderListMagic, sizeof(ShaderListMagic));
++                shaderListStream.write(reinterpret_cast<const char *>(&ShaderListVersion), sizeof(ShaderListVersion));
++                const uint32_t descSize = sizeof(ShaderDescription);
++                shaderListStream.write(reinterpret_cast<const char *>(&descSize), sizeof(descSize));
++            }
++
++            uint32_t queued = 0;
++            {
++                const std::unique_lock<std::mutex> descLock(descQueueMutex);
++                for (const ShaderDescription &desc : descriptions) {
++                    bool &found = shaderHashes[desc.hash()];
++                    if (found) {
++                        continue;
++                    }
++
++                    found = true;
++                    descQueue.push(desc);
++                    queued++;
++                    if (shaderListStream.is_open()) {
++                        shaderListStream.write(reinterpret_cast<const char *>(&desc), sizeof(ShaderDescription));
++                        shaderListEntries++;
++                    }
++                }
++            }
++
++            if (shaderListStream.is_open()) {
++                shaderListStream.flush();
++            }
++
++            shaderListLoaded = queued;
++        }
++
++        descQueueChanged.notify_all();
++        fprintf(stderr, "[rt64] shader list: %u shaders from earlier sessions queued for compiling\n", shaderListLoaded);
++    }
++
++    uint32_t RasterShaderCache::loadedShaderListCount() const {
++        return shaderListLoaded;
++    }
++
+     void RasterShaderCache::waitForAll() {
+         {
+             std::unique_lock<std::mutex> queueLock(descQueueMutex);
+diff --git a/src/render/rt64_raster_shader_cache.h b/src/render/rt64_raster_shader_cache.h
+index 5c40c18..ef574e4 100644
+--- a/src/render/rt64_raster_shader_cache.h
++++ b/src/render/rt64_raster_shader_cache.h
+@@ -45,11 +45,22 @@ namespace RT64 {
+         std::unique_ptr<ShaderCompiler> shaderCompiler;
+         RenderMultisampling multisampling;
+         bool usesHDR = false;
++        std::filesystem::path shaderListPath;
++        std::ofstream shaderListStream;
++        uint32_t shaderListLoaded = 0;
++        uint32_t shaderListEntries = 0;
+         
+         RasterShaderCache(uint32_t threadCount, uint32_t ubershaderThreadCount);
+         ~RasterShaderCache();
+         void setup(RenderDevice *device, RenderShaderFormat shaderFormat, const ShaderLibrary *shaderLibrary, const RenderMultisampling &multisampling);
+         void submit(const ShaderDescription &desc);
++
++        // Saved shader list: every specialized shader the game asks for is appended to a file,
++        // and the next session queues the whole list for compilation as soon as the renderer
++        // starts, so shaders are usually ready before the game first needs them (matters most
++        // where the ubershader is disabled, and a draw has to wait for its shader).
++        void loadShaderList(const std::filesystem::path &path);
++        uint32_t loadedShaderListCount() const;
+         void waitForAll();
+         void destroyAll();
+         RasterShader *getGPUShader(const ShaderDescription &desc);

@@ -341,6 +341,14 @@ ultramodern::renderer::GraphicsApi map_graphics_api(RT64::UserConfiguration::Gra
     std::exit(EXIT_FAILURE);
 }
 
+// Shaders the game has used before (rt64 patch 0020), compiled in the background from the
+// moment the renderer starts so they are ready before the game draws with them. Without
+// this every session compiled each material on first sight, and with the ubershader off on
+// Qualcomm's driver that showed as pop-in and hitches.
+static void load_shader_list(RT64::Application* application) {
+    application->rasterShaderCache->loadShaderList(goemon64::get_app_folder_path() / "rt64_shader_list.bin");
+}
+
 goemon64::renderer::RT64Context::RT64Context(uint8_t* rdram, ultramodern::renderer::WindowHandle window_handle, bool debug) {
     static unsigned char dummy_rom_header[0x40];
     recompui::set_render_hooks();
@@ -496,6 +504,7 @@ goemon64::renderer::RT64Context::RT64Context(uint8_t* rdram, ultramodern::render
 
     high_precision_fb_enabled = app->shaderLibrary->usesHDR;
     std::fprintf(stderr, "[perf] colour targets: %s\n", high_precision_fb_enabled ? "16-bit per channel (high precision)" : "8-bit per channel");
+    load_shader_list(app.get());
     timing_app.store(app.get());
 }
 
@@ -687,6 +696,8 @@ bool goemon64::renderer::RT64Context::update_config(const ultramodern::renderer:
 
     if (new_config.msaa_option != old_config.msaa_option) {
         app->updateMultisampling();
+        // That threw away every compiled shader: queue the saved list again.
+        load_shader_list(app.get());
     }
     return true;
 }
