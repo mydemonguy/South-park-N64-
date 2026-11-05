@@ -1,0 +1,64 @@
+diff --git a/src/common/rt64_device_workarounds.cpp b/src/common/rt64_device_workarounds.cpp
+index d64ac89..e6579a1 100644
+--- a/src/common/rt64_device_workarounds.cpp
++++ b/src/common/rt64_device_workarounds.cpp
+@@ -73,6 +73,19 @@ namespace RT64 {
+         }
+     }
+ 
++    static std::atomic<float> lastProjectionX = 0.0f;
++    static std::atomic<float> lastProjectionY = 0.0f;
++
++    void SetLastProjectionScale(float x, float y) {
++        lastProjectionX.store(x, std::memory_order_relaxed);
++        lastProjectionY.store(y, std::memory_order_relaxed);
++    }
++
++    void GetLastProjectionScale(float &x, float &y) {
++        x = lastProjectionX.load(std::memory_order_relaxed);
++        y = lastProjectionY.load(std::memory_order_relaxed);
++    }
++
+     float GetFarPlaneScale() {
+         return farPlaneScale.load(std::memory_order_relaxed);
+     }
+diff --git a/src/common/rt64_device_workarounds.h b/src/common/rt64_device_workarounds.h
+index 1c29ab8..6024fee 100644
+--- a/src/common/rt64_device_workarounds.h
++++ b/src/common/rt64_device_workarounds.h
+@@ -69,6 +69,10 @@ namespace RT64 {
+     // the far plane. Whatever the game itself culls beyond its own distance still is not
+     // drawn: this only stops the renderer clipping and fogging what the game does send.
+     void SetFarPlaneScale(float scale);
++    // The x and y scale of the last plain perspective projection the game loaded, for
++    // diagnostics (x/y gives the aspect ratio it was built for).
++    void SetLastProjectionScale(float x, float y);
++    void GetLastProjectionScale(float &x, float &y);
+     float GetFarPlaneScale();
+ 
+     void CountWorkload(unsigned int framebufferPairs, unsigned long long setupNs,
+diff --git a/src/contrib/plume b/src/contrib/plume
+--- a/src/contrib/plume
++++ b/src/contrib/plume
+@@ -1 +1 @@
+-Subproject commit e12bec2f14d67245dc388fa6926148bfef149142
++Subproject commit e12bec2f14d67245dc388fa6926148bfef149142-dirty
+diff --git a/src/hle/rt64_rsp.cpp b/src/hle/rt64_rsp.cpp
+index f3f40e8..82ad3c1 100644
+--- a/src/hle/rt64_rsp.cpp
++++ b/src/hle/rt64_rsp.cpp
+@@ -192,6 +192,14 @@ namespace RT64 {
+         const float farScale = GetFarPlaneScale();
+         const hlslpp::float4x4 floatMatrix = ((params & projMask) && (params & loadMask) && (farScale > 1.0f))
+             ? extendFarPlane(originalMatrix, farScale) : originalMatrix;
++        if ((params & projMask) && (params & loadMask)) {
++            const hlslpp::float4x4 &m = originalMatrix;
++            const bool plain = (std::fabs(float(m[0][1])) < 1e-6f) && (std::fabs(float(m[1][0])) < 1e-6f) &&
++                (std::fabs(float(m[2][3])) > 1e-6f) && (std::fabs(float(m[3][3])) < 1e-6f);
++            if (plain) {
++                SetLastProjectionScale(float(m[0][0]), float(m[1][1]));
++            }
++        }
+         // Projection matrix.
+         hlslpp::float4x4 &viewMatrix = viewMatrixStack[projectionMatrixStackSize - 1];
+         hlslpp::float4x4 &projMatrix = projMatrixStack[projectionMatrixStackSize - 1];

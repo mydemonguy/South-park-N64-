@@ -530,6 +530,14 @@ extern "C" void southpark_renderer_timings(char* out, size_t size) {
             double(now.draws - last_counters.draws) / f,
             setup, draw, std::max(0.0, total - setup - draw));
     }
+    {
+        float px = 0.0f, py = 0.0f;
+        RT64::GetLastProjectionScale(px, py);
+        if (px != 0.0f) {
+            const size_t used = std::strlen(out);
+            std::snprintf(out + used, size - used, ", projection x/y %.4f/%.4f (aspect %.4f)", px, py, py / px);
+        }
+    }
     last_counters = now;
 }
 

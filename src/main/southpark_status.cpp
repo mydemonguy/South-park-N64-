@@ -90,8 +90,51 @@ namespace southpark::status {
 #endif
         }
 
+        // Where the game keeps its 4:3 constants, for the widescreen work: South Park PC's
+        // field-of-view hack edits a single 4/3 float, and the N64 game's projection and
+        // view culling most likely read the same kind of constant. Logged once, a few
+        // seconds in (the code and its constants are loaded by then); the addresses are
+        // matched against the game's float loads offline.
+        std::string aspect_text;
+
+        void log_aspect_constants(uint8_t* rdram) {
+            struct Wanted { uint32_t bits; const char* name; };
+            static const Wanted wanted[] = {
+                { 0x3FAAAAABu, "4/3" }, { 0x3FAAAAAAu, "4/3 (low)" }, { 0x3F400000u, "3/4" },
+                { 0x3FE38E39u, "16/9" }, { 0x3F100000u, "9/16" },
+            };
+            for (const Wanted& w : wanted) {
+                std::string line;
+                int count = 0;
+                // KSEG0 code and data, where the game's constants live (0x80000000-0x80400000).
+                for (uint32_t off = 0; off < 0x400000; off += 4) {
+                    if (*reinterpret_cast<const uint32_t*>(rdram + off) == w.bits) {
+                        if (count < 24) {
+                            char item[16];
+                            std::snprintf(item, sizeof(item), " %08X", 0x80000000u + off);
+                            line += item;
+                        }
+                        count++;
+                    }
+                }
+                char head[64];
+                std::snprintf(head, sizeof(head), "[aspect] %s (%08X): %d found", w.name, w.bits, count);
+                aspect_text += head + line + "\n";
+            }
+        }
+
         void report(uint8_t* rdram, long seconds, bool with_threads) {
             const uint64_t frames = audio_frames.load();
+            static bool aspect_logged = false;
+            if (!aspect_logged && seconds >= 20 && rdram != nullptr) {
+                aspect_logged = true;
+                log_aspect_constants(rdram);
+            }
+            // Repeated with every thread snapshot (backgrounding, quitting), which lands
+            // in the part of the log that survives sharing.
+            if (!aspect_text.empty() && (with_threads || seconds < 25)) {
+                std::fputs(aspect_text.c_str(), stderr);
+            }
             std::fprintf(stderr, "[status] %lds gfx=%u audio=%u (%llu Hz avg) screen=%u dma=%u vm_pages=%u\n",
                          seconds, gfx_tasks.load(), audio_buffers.load(),
                          (unsigned long long)(seconds > 0 ? frames / (uint64_t)seconds : 0), screen_updates.load(),
@@ -110,7 +153,7 @@ namespace southpark::status {
                 last_frames = frames;
                 last_seconds = seconds;
             }
-            char timings[448];
+            char timings[640];
             southpark_renderer_timings(timings, sizeof(timings));
             if (timings[0] != '\0') {
                 std::fprintf(stderr, "[perf] %s\n", timings);
