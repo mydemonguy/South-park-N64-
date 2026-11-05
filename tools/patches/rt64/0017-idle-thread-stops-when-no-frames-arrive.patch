@@ -1,0 +1,58 @@
+diff --git a/src/contrib/plume b/src/contrib/plume
+--- a/src/contrib/plume
++++ b/src/contrib/plume
+@@ -1 +1 @@
+-Subproject commit e12bec2f14d67245dc388fa6926148bfef149142
++Subproject commit e12bec2f14d67245dc388fa6926148bfef149142-dirty
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+index 56e3233..1eedc3b 100644
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -944,6 +944,7 @@ namespace RT64 {
+ 
+                 ElapsedTimer workloadTimer;
+                 workloadProfiler.start();
++                lastWorkloadTicks.store(std::chrono::steady_clock::now().time_since_epoch().count(), std::memory_order_relaxed);
+                 threadConfigurationUpdate(workload.viFbSize, workloadConfig);
+ 
+                 // FIXME: This is a very hacky way to find out if we need to advance the frame if the workload was paused for the first time.
+@@ -1237,6 +1238,16 @@ namespace RT64 {
+                 });
+             }
+ 
++            // Only while frames are actually arriving. With the game paused in the
++            // background (or stopped for any other reason) there is no frame time to
++            // protect, and this loop kept a CPU core ~30% busy and the GPU awake for as
++            // long as the app sat in the background.
++            const int64_t sinceWorkload = std::chrono::steady_clock::now().time_since_epoch().count() - lastWorkloadTicks.load(std::memory_order_relaxed);
++            if (threadsRunning && (std::chrono::steady_clock::duration(sinceWorkload) > std::chrono::milliseconds(250))) {
++                Thread::sleepMilliseconds(50);
++                continue;
++            }
++
+             if (threadsRunning) {
+                 if (workerMutex.try_lock()) {
+                     commandList->begin();
+diff --git a/src/hle/rt64_workload_queue.h b/src/hle/rt64_workload_queue.h
+index ddce5af..4cf76f8 100644
+--- a/src/hle/rt64_workload_queue.h
++++ b/src/hle/rt64_workload_queue.h
+@@ -4,6 +4,9 @@
+ 
+ #pragma once
+ 
++#include <atomic>
++#include <chrono>
++#include <cstdint>
+ #include <array>
+ 
+ #include "common/rt64_enhancement_configuration.h"
+@@ -75,6 +78,8 @@ namespace RT64 {
+         std::thread *renderThread = nullptr;
+         std::thread *idleThread = nullptr;
+         bool idleActive = false;
++        // When the last workload started, in steady_clock ticks (see idleThreadLoop).
++        std::atomic<int64_t> lastWorkloadTicks = 0;
+         std::mutex idleMutex;
+         std::condition_variable idleCondition;
+         std::mutex workerMutex;
