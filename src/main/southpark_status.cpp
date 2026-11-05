@@ -153,7 +153,7 @@ namespace southpark::status {
                 last_frames = frames;
                 last_seconds = seconds;
             }
-            char timings[768];
+            char timings[1024];
             southpark_renderer_timings(timings, sizeof(timings));
             if (timings[0] != '\0') {
                 std::fprintf(stderr, "[perf] %s\n", timings);

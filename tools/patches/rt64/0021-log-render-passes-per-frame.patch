@@ -1,0 +1,95 @@
+diff --git a/src/common/rt64_device_workarounds.cpp b/src/common/rt64_device_workarounds.cpp
+index 1194d3c..ef677a7 100644
+--- a/src/common/rt64_device_workarounds.cpp
++++ b/src/common/rt64_device_workarounds.cpp
+@@ -76,6 +76,23 @@ namespace RT64 {
+         shaderWaitMicros.fetch_add(uint64_t(waitedMs * 1000.0), std::memory_order_relaxed);
+     }
+ 
++    static std::atomic<unsigned long long> passTimeNs[PassTimeSlots] = {};
++    static std::atomic<unsigned long long> passTimeCounts[PassTimeSlots] = {};
++
++    void CountPassTime(uint32_t passIndex, unsigned long long ns) {
++        if (passIndex < PassTimeSlots) {
++            passTimeNs[passIndex].fetch_add(ns, std::memory_order_relaxed);
++            passTimeCounts[passIndex].fetch_add(1, std::memory_order_relaxed);
++        }
++    }
++
++    void GetPassTimes(unsigned long long ns[PassTimeSlots], unsigned long long counts[PassTimeSlots]) {
++        for (uint32_t i = 0; i < PassTimeSlots; i++) {
++            ns[i] = passTimeNs[i].load(std::memory_order_relaxed);
++            counts[i] = passTimeCounts[i].load(std::memory_order_relaxed);
++        }
++    }
++
+     void GetShaderWaitStats(uint64_t &waits, uint64_t &skipped, double &waitedMs) {
+         waits = shaderWaits.load(std::memory_order_relaxed);
+         skipped = shaderWaitSkips.load(std::memory_order_relaxed);
+diff --git a/src/common/rt64_device_workarounds.h b/src/common/rt64_device_workarounds.h
+index 7f4f600..b2b5bb6 100644
+--- a/src/common/rt64_device_workarounds.h
++++ b/src/common/rt64_device_workarounds.h
+@@ -52,6 +52,12 @@ namespace RT64 {
+     // short while for it (bounded per second) instead of being dropped, which made new things
+     // pop in or blink. Counts since start, for the session log.
+     void CountShaderWait(double waitedMs, bool gotShader);
++
++    // GPU time of each drawn render pass, by its position in the frame (the first 8), as
++    // running totals with the number of frames that had that pass.
++    static const uint32_t PassTimeSlots = 8;
++    void CountPassTime(uint32_t passIndex, unsigned long long ns);
++    void GetPassTimes(unsigned long long ns[PassTimeSlots], unsigned long long counts[PassTimeSlots]);
+     void GetShaderWaitStats(uint64_t &waits, uint64_t &skipped, double &waitedMs);
+ 
+     // Diagnostics: running totals the host divides by the number of frames to report
+diff --git a/src/hle/rt64_workload_queue.cpp b/src/hle/rt64_workload_queue.cpp
+index 1eedc3b..3fa928c 100644
+--- a/src/hle/rt64_workload_queue.cpp
++++ b/src/hle/rt64_workload_queue.cpp
+@@ -620,9 +620,37 @@ namespace RT64 {
+             }
+ #       endif
+ 
++            // Diagnostics: about every 10 s (300 frames), describe each render pass of one frame -- what
++            // the game draws into, how big the target is and how many draws it holds -- to find
++            // passes that could be merged or skipped. On a tiled mobile GPU every pass writes its
++            // whole colour and depth target to memory and the next one reads them back.
++            static uint64_t passLogFrame = 0;
++            const bool passLog = ((passLogFrame++ % 300) == 150);
++            if (passLog) {
++                fprintf(stderr, "[passes] frame %llu: %u passes (VI %ux%u)\n", (unsigned long long)(passLogFrame), fbPairCount,
++                    unsigned(workload.viFbSize[0]), unsigned(workload.viFbSize[1]));
++            }
++
+             for (uint32_t f = 0; f < fbPairCount; f++) {
+                 const FramebufferPair &fbPair = workload.fbPairs[f];
++                if (passLog) {
++                    static const char *const reasons[] = { "none", "samples colour", "samples depth", "colour image changed", "depth image changed", "end of list" };
++                    const uint32_t reason = uint32_t(fbPair.flushReason);
++                    fprintf(stderr, "[passes]   #%u colour %08X fmt%u/siz%u w%u h%d, depth %08X%s%s%s, %u draws in %u projections%s%s, ops %zu+%zu, ends: %s\n",
++                        f, fbPair.colorImage.address, unsigned(fbPair.colorImage.fmt), unsigned(fbPair.colorImage.siz), unsigned(fbPair.colorImage.width),
++                        int(fbPair.drawColorRect.isEmpty() ? 0 : fbPair.drawColorRect.bottom(true)), fbPair.depthImage.address,
++                        fbPair.depthRead ? " read" : "", fbPair.depthWrite ? " write" : "", fbPair.fastPaths.clearDepthOnly ? " (depth clear only)" : "",
++                        fbPair.gameCallCount, fbPair.projectionCount, fbPair.fillRectOnly ? ", fill rects only" : "",
++                        fbPair.syncRequired ? ", RAM sync" : "", fbPair.startFbOperations.size(), fbPair.endFbOperations.size(),
++                        (reason < 6) ? reasons[reason] : "?");
++                }
++
+                 if (getTargetsFromPair(f)) {
++                    if (passLog) {
++                        fprintf(stderr, "[passes]   #%u target %ux%u (scale %.2fx%.2f)%s\n", f, targetWidth, targetHeight,
++                            double(float(fixedResScale[0])), double(float(fixedResScale[1])), (depthTarget != nullptr) ? ", own depth" : ", dummy depth");
++                    }
++
+                     RenderFramebufferStorage &fbStorage = renderFramebufferManager->get(fbKey, colorTarget, (depthTarget != nullptr) ? depthTarget : dummyDepthTarget.get());
+                     FramebufferRenderer::DrawParams drawParams;
+                     drawParams.worker = ext.workloadGraphicsWorker;
+@@ -874,6 +902,7 @@ namespace RT64 {
+             uint64_t gpuDraw = 0;
+             for (uint32_t t = 0; t < timedPairs; t++) {
+                 gpuDraw += frameTimestamps[3 + t * 2] - frameTimestamps[2 + t * 2];
++                CountPassTime(t, frameTimestamps[3 + t * 2] - frameTimestamps[2 + t * 2]);
+             }
+             CountWorkload(workload.fbPairCount, frameTimestamps[1] - frameTimestamps[0], gpuDraw, gpuTotal);
+ 

@@ -571,6 +571,28 @@ extern "C" void southpark_renderer_timings(char* out, size_t size) {
         last_skipped = skipped;
         last_wait_ms = wait_ms;
     }
+    {
+        // Average GPU time of each render pass since the last line, by its position in the
+        // frame (rt64 patch 0021; the [passes] lines say what each pass draws).
+        static unsigned long long last_ns[RT64::PassTimeSlots] = {}, last_counts[RT64::PassTimeSlots] = {};
+        unsigned long long ns[RT64::PassTimeSlots], counts[RT64::PassTimeSlots];
+        RT64::GetPassTimes(ns, counts);
+        std::string passes;
+        for (uint32_t i = 0; i < RT64::PassTimeSlots; i++) {
+            const unsigned long long n = counts[i] - last_counts[i];
+            if (n > 0) {
+                char item[24];
+                std::snprintf(item, sizeof(item), "%s%.1f", passes.empty() ? "" : "/", double(ns[i] - last_ns[i]) / double(n) / 1e6);
+                passes += item;
+            }
+            last_ns[i] = ns[i];
+            last_counts[i] = counts[i];
+        }
+        if (!passes.empty()) {
+            const size_t used = std::strlen(out);
+            std::snprintf(out + used, size - used, ", pass ms %s", passes.c_str());
+        }
+    }
     last_counters = now;
 }
 
