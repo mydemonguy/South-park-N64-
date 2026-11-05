@@ -1,0 +1,136 @@
+diff --git a/src/common/rt64_device_workarounds.cpp b/src/common/rt64_device_workarounds.cpp
+index e6579a1..1194d3c 100644
+--- a/src/common/rt64_device_workarounds.cpp
++++ b/src/common/rt64_device_workarounds.cpp
+@@ -64,6 +64,24 @@ namespace RT64 {
+         return ubershadersEnabled.load(std::memory_order_relaxed);
+     }
+ 
++    static std::atomic<uint64_t> shaderWaits = 0;
++    static std::atomic<uint64_t> shaderWaitSkips = 0;
++    static std::atomic<uint64_t> shaderWaitMicros = 0;
++
++    void CountShaderWait(double waitedMs, bool gotShader) {
++        shaderWaits.fetch_add(1, std::memory_order_relaxed);
++        if (!gotShader) {
++            shaderWaitSkips.fetch_add(1, std::memory_order_relaxed);
++        }
++        shaderWaitMicros.fetch_add(uint64_t(waitedMs * 1000.0), std::memory_order_relaxed);
++    }
++
++    void GetShaderWaitStats(uint64_t &waits, uint64_t &skipped, double &waitedMs) {
++        waits = shaderWaits.load(std::memory_order_relaxed);
++        skipped = shaderWaitSkips.load(std::memory_order_relaxed);
++        waitedMs = double(shaderWaitMicros.load(std::memory_order_relaxed)) / 1000.0;
++    }
++
+     static std::atomic<float> farPlaneScale = 1.0f;
+ 
+     void SetFarPlaneScale(float scale) {
+diff --git a/src/common/rt64_device_workarounds.h b/src/common/rt64_device_workarounds.h
+index 6024fee..7f4f600 100644
+--- a/src/common/rt64_device_workarounds.h
++++ b/src/common/rt64_device_workarounds.h
+@@ -4,6 +4,8 @@
+ 
+ #pragma once
+ 
++#include <cstdint>
++
+ namespace RT64 {
+     // Process-wide switches for working around driver bugs that RT64 cannot detect
+     // reliably and cannot fix. Deliberately global rather than carried in
+@@ -46,6 +48,12 @@ namespace RT64 {
+     void SetUbershadersEnabled(bool enabled);
+     bool GetUbershadersEnabled();
+ 
++    // With ubershaders disabled, a draw whose specialized shader is not compiled yet waits a
++    // short while for it (bounded per second) instead of being dropped, which made new things
++    // pop in or blink. Counts since start, for the session log.
++    void CountShaderWait(double waitedMs, bool gotShader);
++    void GetShaderWaitStats(uint64_t &waits, uint64_t &skipped, double &waitedMs);
++
+     // Diagnostics: running totals the host divides by the number of frames to report
+     // per-frame figures. A depth switch flips the depth buffer between writable and
+     // read-only (for decal draws), which ends the render pass; on a tiled GPU every
+diff --git a/src/render/rt64_framebuffer_renderer.cpp b/src/render/rt64_framebuffer_renderer.cpp
+index 174fe66..7b8026c 100644
+--- a/src/render/rt64_framebuffer_renderer.cpp
++++ b/src/render/rt64_framebuffer_renderer.cpp
+@@ -70,6 +70,54 @@ namespace interop {
+     };
+ };
+ 
++
++#include <chrono>
++#include <mutex>
++#include <thread>
++
++namespace RT64 {
++    // Waits up to 25 ms for one draw's specialized shader, and at most 150 ms in any one-second
++    // window, so a burst of new materials costs a short hitch instead of freezing. Only reached
++    // on a cache miss with ubershaders disabled.
++    static RasterShader *waitForSpecializedShader(RasterShaderCache *cache, const ShaderDescription &desc) {
++        using Clock = std::chrono::steady_clock;
++        static std::mutex budgetMutex;
++        static Clock::time_point windowStart = Clock::now();
++        static double windowWaitedMs = 0.0;
++        constexpr double PerDrawMs = 25.0;
++        constexpr double PerSecondMs = 150.0;
++
++        const Clock::time_point start = Clock::now();
++        double allowedMs;
++        {
++            const std::lock_guard<std::mutex> lock(budgetMutex);
++            if (std::chrono::duration<double>(start - windowStart).count() >= 1.0) {
++                windowStart = start;
++                windowWaitedMs = 0.0;
++            }
++            allowedMs = std::min(PerDrawMs, PerSecondMs - windowWaitedMs);
++        }
++
++        // Submitting again is a no-op if the shader is already queued or compiled.
++        cache->submit(desc);
++        RasterShader *shader = cache->getGPUShader(desc);
++        while ((shader == nullptr) && (allowedMs > 0.0) &&
++               (std::chrono::duration<double, std::milli>(Clock::now() - start).count() < allowedMs)) {
++            std::this_thread::sleep_for(std::chrono::microseconds(500));
++            shader = cache->getGPUShader(desc);
++        }
++
++        const double waitedMs = std::chrono::duration<double, std::milli>(Clock::now() - start).count();
++        {
++            const std::lock_guard<std::mutex> lock(budgetMutex);
++            windowWaitedMs += waitedMs;
++        }
++
++        CountShaderWait(waitedMs, shader != nullptr);
++        return shader;
++    }
++};
++
+ namespace RT64 {
+     // Helper functions.
+     
+@@ -1719,12 +1767,15 @@ namespace RT64 {
+                             triangles.pipeline = gpuShader->pipeline.get();
+                         }
+                         else if (!p.ubershadersOnly && !GetUbershadersEnabled()) {
+-                            // Driver workaround: skip the draw until its specialized shader exists.
+-                            skipForUbershader = true;
+-                            static uint64_t skipped = 0;
+-                            skipped++;
+-                            if ((skipped == 1) || ((skipped % 5000) == 0)) {
+-                                fprintf(stderr, "[rt64] draws skipped while their shader compiles: %llu\n", (unsigned long long)(skipped));
++                            // Driver workaround (no ubershader on Qualcomm's driver): wait briefly for the
++                            // specialized shader rather than dropping the draw, which made new objects
++                            // pop in and blink. Skipped only if the wait budget runs out.
++                            gpuShader = waitForSpecializedShader(p.rasterShaderCache, call.shaderDesc);
++                            if (gpuShader != nullptr) {
++                                triangles.pipeline = gpuShader->pipeline.get();
++                            }
++                            else {
++                                skipForUbershader = true;
+                             }
+                         }
+                         else {

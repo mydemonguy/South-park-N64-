@@ -38,6 +38,8 @@ static std::atomic<RT64::Application*> timing_app{nullptr};
 // The GPU-heavy settings in effect, repeated on every [perf] line: the one-off "[perf] settings"
 // line can fall into the part of a long log the launcher leaves out when sharing it.
 static std::atomic<int> timing_msaa{-1};
+extern "C" float southpark_view_distance_scale(void);   // src/ui/ui_config.cpp
+extern "C" float southpark_widescreen_scale(void);      // below
 static std::atomic<bool> timing_fbe{true};
 
 static RT64::UserConfiguration::Antialiasing device_max_msaa = RT64::UserConfiguration::Antialiasing::None;
@@ -541,6 +543,24 @@ extern "C" void southpark_renderer_timings(char* out, size_t size) {
             const size_t used = std::strlen(out);
             std::snprintf(out + used, size - used, ", projection x/y %.4f/%.4f (aspect %.4f)", px, py, py / px);
         }
+    }
+    {
+        // Draws that had to wait for their specialized shader since the last line (Qualcomm
+        // driver workaround, rt64 patch 0019): a burst here lines up with hitches, and any
+        // "skipped" ones were invisible for that frame. Then the View Distance and widescreen
+        // factors in use, so every [perf] line shows them.
+        static uint64_t last_waits = 0, last_skipped = 0;
+        static double last_wait_ms = 0.0;
+        uint64_t waits = 0, skipped = 0;
+        double wait_ms = 0.0;
+        RT64::GetShaderWaitStats(waits, skipped, wait_ms);
+        const size_t used = std::strlen(out);
+        std::snprintf(out + used, size - used, ", shader waits %llu (%.0f ms, %llu skipped), view x%.1f, widescreen x%.2f",
+            (unsigned long long)(waits - last_waits), wait_ms - last_wait_ms, (unsigned long long)(skipped - last_skipped),
+            double(southpark_view_distance_scale()), double(southpark_widescreen_scale()));
+        last_waits = waits;
+        last_skipped = skipped;
+        last_wait_ms = wait_ms;
     }
     last_counters = now;
 }
