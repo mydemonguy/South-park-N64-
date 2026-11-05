@@ -53421,6 +53421,7 @@ L_0025C114:
     CHECK_FR(ctx, 22);
     NAN_CHECK(ctx->f21.fl); NAN_CHECK(ctx->f22.fl); 
     ctx->f21.fl = MUL_S(ctx->f21.fl, ctx->f22.fl);
+    ctx->f21.fl = sp_widen_half_angle(ctx->f21.fl);
     // 0x0025C164: sb          $zero, 0x14($s4)
     MEM_B(0X14, ctx->r20) = 0;
     // 0x0025C168: sb          $v0, 0x15($s4)

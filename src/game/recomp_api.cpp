@@ -91,6 +91,10 @@ extern "C" void recomp_get_target_aspect_ratio(uint8_t* rdram, recomp_context* c
         case ultramodern::renderer::AspectRatio::Expand:
             _return(ctx, std::max(static_cast<float>(width) / height, original));
             return;
+        case ultramodern::renderer::AspectRatio::Manual:
+            // The menu's "16:9" choice (rt64_render_context.cpp sets RT64's target to 16:9).
+            _return(ctx, std::max(16.0f / 9.0f, original));
+            return;
     }
 }
 

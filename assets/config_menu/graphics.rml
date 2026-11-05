@@ -144,6 +144,18 @@
                                 data-style-nav-down="is_android ? '#rr_display' : '#wm_fullscreen'"
                             />
                             <label class="config-option__tab-label" for="ar_expand">Expand</label>
+                            <input type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(2)"
+                                name="aspectratio"
+                                data-checked="ar_option"
+                                value="Manual"
+                                id="ar_16x9"
+                                style="nav-up: #ds_4x; nav-down: #wm_fullscreen"
+                                data-style-nav-up="(res_option == 'Original' || res_option == 'Original2x') ? '#ds_4x' : '#res_auto'"
+                                data-style-nav-down="is_android ? '#rr_display' : '#wm_fullscreen'"
+                            />
+                            <label class="config-option__tab-label" for="ar_16x9">16:9</label>
                         </div>
                     </div>
 
@@ -304,7 +316,7 @@
                         Note: <b>4x</b> downsampling quality at <b>Original 2x</b> resolution may cause performance issues on low end devices, as it will cause the game to render <i>at almost 4k internal resolution</i>.
                     </p>
                     <p data-if="cur_config_index == 2">
-                        Sets the horizontal aspect ratio. <b>Original</b> uses the game's original 4:3 aspect ratio. <b>Expand</b> will adjust to match the game window's aspect ratio.
+                        Sets the horizontal aspect ratio. <b>Original</b> uses the game's original 4:3 aspect ratio. <b>Expand</b> fills the whole screen. <b>16:9</b> is widescreen at 16:9, with bars at the sides on taller-than-16:9 phones. In both widescreen modes the game also draws what's at the sides, instead of only the 4:3 middle.
                     </p>
                     <p data-if="cur_config_index == 3">
                         Sets whether the game should display <b>Windowed</b> or <b>Fullscreen</b>. You can also use <b>F11</b> or <b>Alt + Enter</b> to toggle this option.

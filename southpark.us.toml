@@ -178,3 +178,11 @@ text = "ctx->f0.fl *= southpark_view_distance_scale();"
 func = "func_00252870"
 before_vram = 0x00253448
 text = "ctx->f2.fl *= southpark_view_distance_scale();"
+
+# Widescreen. RT64 widens the 3D view around the game's 4:3 picture, but the game culls to
+# 4:3, so the sides stay empty. Its frustum and the level-block box are both built from the
+# horizontal half-angle in $f21 (fovy * aspect * k, just computed): widen it to match.
+[[patches.hook]]
+func = "func_0025B68C"
+before_vram = 0x0025C164
+text = "ctx->f21.fl = sp_widen_half_angle(ctx->f21.fl);"

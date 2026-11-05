@@ -62,4 +62,18 @@ extern "C"
 #endif
 float southpark_view_distance_scale(void);
 
+// Widescreen (src/main/rt64_render_context.cpp): how many times wider than 4:3 RT64 shows
+// the 3D view -- 1.0 at Original. The game's camera code builds its culling frustum and the
+// box of level blocks around the camera from one horizontal half-angle; the hook in
+// southpark.us.toml widens that angle so its tangent grows by the same factor as the view.
+#ifdef __cplusplus
+extern "C"
+#endif
+float southpark_widescreen_scale(void);
+
+static inline float sp_widen_half_angle(float half_angle) {
+    const float scale = southpark_widescreen_scale();
+    return (scale > 1.0f) ? atanf(tanf(half_angle) * scale) : half_angle;
+}
+
 #endif

@@ -42,7 +42,8 @@ constexpr auto res_default            = ultramodern::renderer::Resolution::Auto;
 #endif
 constexpr auto hr_default             = ultramodern::renderer::HUDRatioMode::Clamp16x9;
 constexpr auto api_default            = ultramodern::renderer::GraphicsApi::Auto;
-constexpr auto ar_default             = ultramodern::renderer::AspectRatio::Expand;
+// 16:9 widescreen (Manual with a 16:9 target, see rt64_render_context.cpp).
+constexpr auto ar_default             = ultramodern::renderer::AspectRatio::Manual;
 // MSAA default is device-class-dependent. On handheld GPUs (Adreno 650 on the
 // Retroid Pocket 5, the reference Android target) MSAA is paid per-sample on EVERY
 // framebuffer pair, and heavy multi-pass menu screens submit ~20 render-target

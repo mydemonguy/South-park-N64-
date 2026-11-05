@@ -1,4 +1,5 @@
 #include <atomic>
+#include <cmath>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -45,6 +46,7 @@ static bool high_precision_fb_enabled = false;
 
 #if defined(__ANDROID__)
 #include <atomic>
+#include <cmath>
 // Fresh ANativeWindow published by the SDL/main thread on resume and consumed
 // by the gfx thread (in update_screen) to hand down to the swap chain. Using a
 // global atomic avoids the main thread needing a reference to the gfx-thread-
@@ -249,6 +251,8 @@ void set_application_user_config(RT64::Application* application, const ultramode
     }
 
     application->userConfig.aspectRatio = to_rt64(config.ar_option);
+    // The menu's third Aspect Ratio choice ("16:9") is Manual with a fixed 16:9 target.
+    application->userConfig.aspectTarget = 16.0 / 9.0;
     application->userConfig.antialiasing = to_rt64(config.msaa_option);
     application->userConfig.refreshRate = to_rt64(config.rr_option);
     application->userConfig.refreshRateTarget = config.rr_manual_value;
@@ -547,8 +551,44 @@ namespace southpark::status { void count_gfx_task(); void count_screen_update();
 void southpark_android_frame_done();
 #endif
 
+// Widescreen: RT64 shows the game's 4:3 picture in the middle and widens every perspective
+// projection by target/source aspect (rt64_workload_queue.cpp, rt64_projection_processor.cpp).
+// The game culls to its own 4:3 view, so it is told the same factor (southpark.us.toml hook in
+// its camera code) and widens its culling to match. South Park's frame is 480x360, so the
+// source is 4:3; the target follows RT64's rules for each mode.
+static std::atomic<float> widescreen_scale{ 1.0f };
+
+extern "C" float southpark_widescreen_scale(void) {
+    return widescreen_scale.load(std::memory_order_relaxed);
+}
+
+static void update_widescreen_scale(RT64::Application* application) {
+    constexpr float source = 4.0f / 3.0f;
+    float target = source;
+    switch (application->userConfig.aspectRatio) {
+    case RT64::UserConfiguration::AspectRatio::Expand: {
+        const uint32_t w = application->sharedQueueResources->swapChainWidth;
+        const uint32_t h = application->sharedQueueResources->swapChainHeight;
+        if (w > 0 && h > 0) {
+            target = std::max(float(w) / float(h), source);
+        }
+        break;
+    }
+    case RT64::UserConfiguration::AspectRatio::Manual:
+        target = std::max(float(application->userConfig.aspectTarget), source);
+        break;
+    default:
+        break;
+    }
+    const float scale = target / source;
+    if (std::fabs(widescreen_scale.exchange(scale, std::memory_order_relaxed) - scale) > 0.001f) {
+        std::fprintf(stderr, "[aspect] widescreen: game culls %.3f times wider (target %.3f)\n", double(scale), double(target));
+    }
+}
+
 void goemon64::renderer::RT64Context::send_dl(const OSTask* task) {
     southpark::status::count_gfx_task();
+    update_widescreen_scale(app.get());
     // View Distance is applied by the game itself now (hooks in southpark.us.toml scale its
     // projection, culling and fade together), so RT64 must not stretch the far plane again.
     RT64::SetFarPlaneScale(1.0f);
