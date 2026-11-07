@@ -240,9 +240,18 @@ namespace {
         Clock::time_point route_time{};
         uint32_t routes_found = 0;
         uint32_t target_cam = 0;
+        // Blocked: walking forward most of the last 4 s but no more than 60 units from where
+        // it was. (Sliding along a wall still counts as moving to the half-second check.)
+        std::array<Vec3, 8> recent{};
+        int recent_count = 0;
+        float forward_share = 0.0f;   // running share of polls with forward held
+        bool blocked = false;
+        // Route points that led into a wall, avoided for a while.
+        std::vector<std::pair<int, Clock::time_point>> avoid;
         Clock::time_point target_since{};
         uint32_t target_changes = 0;
         double play_seconds = 0.0;   // time in matches this session
+        double near_human_seconds = 0.0;   // ...of which within 800 units of the person playing
         Clock::time_point last_poll{};
         // How much its view turned: to tell a steady bot from a twitchy one in logs.
         bool have_yaw = false;
@@ -389,11 +398,12 @@ namespace {
     // the next point on the way. The route then starts at whichever such point is best to
     // walk to first (near the bot and close to the target), so a bot that has never been on
     // a known path still heads for the nearest one that leads where it wants to go.
-    std::vector<int> nav_route(const Vec3& from, const Vec3& to) {
+    std::vector<int> nav_route(const Vec3& from, const Vec3& to, const std::vector<uint8_t>& blocked) {
         std::vector<int> route;
         const int goal = nav_nearest(to, 300.0f);
         if (goal < 0) return route;
         const size_t n = nav.nodes.size();
+        auto usable = [&](size_t a) { return (a >= blocked.size()) || !blocked[a]; };
         std::vector<std::vector<uint16_t>> into(n);   // edges reversed
         for (size_t a = 0; a < n; a++) {
             for (uint8_t e = 0; e < nav.nodes[a].out_count; e++) into[nav.nodes[a].out[e]].push_back(uint16_t(a));
@@ -409,6 +419,7 @@ namespace {
             open.pop();
             if (d > to_go[size_t(cur)]) continue;
             for (const uint16_t a : into[size_t(cur)]) {
+                if (!usable(a)) continue;
                 const float c = d + distance(nav.nodes[a].pos, nav.nodes[size_t(cur)].pos);
                 if (c < to_go[a]) {
                     to_go[a] = c;
@@ -421,7 +432,7 @@ namespace {
         int start = -1;
         float best = 1e30f;
         for (size_t a = 0; a < n; a++) {
-            if ((to_go[a] >= 1e29f) || (std::fabs(nav.nodes[a].pos.y - from.y) > 120.0f)) continue;
+            if ((to_go[a] >= 1e29f) || !usable(a) || (std::fabs(nav.nodes[a].pos.y - from.y) > 120.0f)) continue;
             const float score = 2.0f * flat_distance(nav.nodes[a].pos, from) + to_go[a];
             if (score < best) {
                 best = score;
@@ -484,10 +495,10 @@ namespace {
         if (own_view(bot, view, cams, count)) {
             std::fprintf(stderr,
                 "[bot %d] %.0fs %s, at (%.0f, %.0f, %.0f), moved %.0f since last line, %.0f total; players seen %d, "
-                "times in play %u, hunts %u, stuck %u, menu presses %u, area changes %u, throws %u (%u lined up), jumps %u, detours %u, routes %u (map %zu points), target changes %u, view turned %.0f deg/s\n",
+                "times in play %u, hunts %u, stuck %u, menu presses %u, area changes %u, throws %u (%u lined up), jumps %u, detours %u, routes %u (map %zu points), target changes %u, near you %.0fs, view turned %.0f deg/s\n",
                 bot.controller + 1, t, action_name(bot.action), double(view.pos.x), double(view.pos.y), double(view.pos.z),
                 bot.have_pos ? double(distance(view.pos, bot.report_pos)) : 0.0, bot.distance_total, count,
-                bot.play_entries, bot.hunts, bot.stuck_count, bot.menu_presses, bot.area_changes, bot.fires, bot.aimed_throws, bot.jumps, bot.detours, bot.routes_found, nav.nodes.size(), bot.target_changes,
+                bot.play_entries, bot.hunts, bot.stuck_count, bot.menu_presses, bot.area_changes, bot.fires, bot.aimed_throws, bot.jumps, bot.detours, bot.routes_found, nav.nodes.size(), bot.target_changes, bot.near_human_seconds,
                 bot.yaw_travel * 57.2958 / std::max(1.0, seconds(bot.last_report, now)));
             bot.yaw_travel = 0.0;
             bot.report_pos = view.pos;
@@ -582,6 +593,17 @@ namespace {
         }
     }
 
+    // The person playing: player 1, whose view is the first one the game allocates (the
+    // lowest address) and which no bot has claimed as its own.
+    uint32_t human_camera(const std::array<uint32_t, MaxPlayers>& cams, int count) {
+        for (int i = 0; i < count; i++) {
+            bool claimed = false;
+            for (const Bot& b : bots) claimed |= (b.active && (b.controller != 0) && (b.own_cam == cams[i]));
+            if (!claimed) return cams[i];   // cams are sorted by address
+        }
+        return 0;
+    }
+
     // Who to go after. Mostly the nearest player (a player on another level counts as
     // further), but: the person playing counts as nearer, so the bots come for them and do
     // not only fight each other; a bot sticks with its target for a while rather than
@@ -598,10 +620,14 @@ namespace {
             const Vec3 to = other.pos - self.pos;
             float cost = std::sqrt(to.x * to.x + to.z * to.z) + 2.0f * std::fabs(to.y);
             if (cost < 1.0f) continue;
-            bool human = true;   // a view no bot has claimed is a person's
-            for (const Bot& b : bots) human &= !(b.active && (b.controller != 0) && (b.own_cam == cams[i]));
-            if (human) cost *= 0.6f;
-            if (cams[i] == bot.target_cam) {
+            const bool human = (cams[i] == human_camera(cams, count));
+            if (human) {
+                // The bots are there for the person playing: go for them unless another
+                // player is right in the way, and never get bored of them.
+                cost *= 0.3f;
+                if (cams[i] == bot.target_cam) cost *= 0.7f;
+            }
+            else if (cams[i] == bot.target_cam) {
                 const double on = seconds(bot.target_since, now);
                 cost *= (on < 30.0) ? 0.7f : float(1.0 + (on - 30.0) / 10.0);
             }
@@ -626,16 +652,23 @@ namespace {
             start_bot(bot, controller, now);
         }
 
-        if (bot.playing && (controller != 0)) {
-            const double dt = seconds(bot.last_poll, now);
-            if (dt < 1.0) bot.play_seconds += dt;
-        }
-        bot.last_poll = now;
-
         std::array<uint32_t, MaxPlayers> cams{};
         int camera_count = 0;
         View view{};
         const bool have_view = own_view(bot, view, cams, camera_count);
+
+        if (bot.playing && (controller != 0)) {
+            const double dt = seconds(bot.last_poll, now);
+            if (dt < 1.0) {
+                bot.play_seconds += dt;
+                View h{};
+                const uint32_t hc = human_camera(cams, camera_count);
+                if (have_view && (hc != 0) && (hc != bot.own_cam) && read_view(hc, h) && (distance(h.pos, view.pos) < 800.0f)) {
+                    bot.near_human_seconds += dt;
+                }
+            }
+        }
+        bot.last_poll = now;
         if (have_view && bot.playing && (bot.own_cam != 0)) {
             const float yaw = yaw_of(view.fwd);
             if (bot.have_yaw) {
@@ -668,6 +701,15 @@ namespace {
                     bot.last_moved = now;
                 }
                 bot.last_pos = view.pos;
+                // Blocked check over the last 4 s.
+                if (bot.recent_count == int(bot.recent.size())) {
+                    bot.blocked = (distance(view.pos, bot.recent[0]) < 60.0f) && (bot.forward_share > 0.6f);
+                    std::rotate(bot.recent.begin(), bot.recent.begin() + 1, bot.recent.end());
+                    bot.recent.back() = view.pos;
+                }
+                else {
+                    bot.recent[size_t(bot.recent_count++)] = view.pos;
+                }
                 bot.have_pos = true;
             }
             bot.last_check = now;
@@ -737,7 +779,15 @@ namespace {
                     begin(bot, Action::Probe, 1.5, now);
                 }
             }
-            else if ((idle > 3.0) && (bot.action != Action::Unstick)) {
+            else if (((idle > 3.0) || bot.blocked) && (bot.action != Action::Unstick)) {
+                // A route point that walked it into a wall is skipped for 20 s.
+                if (bot.blocked && (bot.route_step < bot.route.size())) {
+                    bot.avoid.push_back({ bot.route[bot.route_step], now + std::chrono::seconds(20) });
+                }
+                bot.route.clear();
+                bot.route_time = Clock::time_point{};
+                bot.blocked = false;
+                bot.recent_count = 0;
                 bot.stuck_count++;
                 bot.turn_dir = (rng() & 1) ? 1.0f : -1.0f;
                 begin(bot, Action::Unstick, 1.2 + rng_unit(), now);
@@ -810,7 +860,13 @@ namespace {
                 Vec3 waypoint{};
                 if ((flat > 500.0f) || other_level) {
                     if ((bot.route_generation != nav.generation) || (seconds(bot.route_time, now) > 1.0)) {
-                        bot.route = nav_route(view.pos, target);
+                        std::vector<uint8_t> blocked_points(nav.nodes.size(), 0);
+                        bot.avoid.erase(std::remove_if(bot.avoid.begin(), bot.avoid.end(),
+                            [&](const auto& a) { return now >= a.second; }), bot.avoid.end());
+                        for (const auto& a : bot.avoid) {
+                            if (size_t(a.first) < blocked_points.size()) blocked_points[size_t(a.first)] = 1;
+                        }
+                        bot.route = nav_route(view.pos, target, blocked_points);
                         bot.route_step = 0;
                         bot.route_time = now;
                         bot.route_generation = nav.generation;
@@ -845,7 +901,7 @@ namespace {
                         if (std::fabs(sy) < 0.05f) sy = 0.0f;
                     }
                     if (std::fabs(wp_err) < 1.0f) b |= BTN_C_UP;
-                    // Progress is judged along the route, so reset the no-progress timer.
+                    // Progress along the route is judged by the blocked check instead.
                     bot.hunt_best = flat;
                     bot.hunt_best_time = now;
                     break;
@@ -946,6 +1002,10 @@ namespace {
         bot.prev_sx = sx;
         bot.prev_sy = sy;
 
+        if (bot.playing) {
+            bot.forward_share = bot.forward_share * 0.97f + ((b & BTN_C_UP) ? 0.03f : 0.0f);
+        }
+
         // Count presses (new this poll), not polls.
         const uint16_t pressed = uint16_t(b & ~bot.prev_buttons);
         if (pressed & BTN_Z) bot.fires++;
@@ -980,9 +1040,9 @@ void southpark_bot_summary() {
         if (!bot.active || (bot.controller == 0) || (bot.play_entries == 0)) continue;
         shown++;
         std::fprintf(stderr,
-            "[match] bot %d this session: %u matches, %.0fs playing, walked %.0f, throws %u (%u lined up), respawns/area changes %u, "
+            "[match] bot %d this session: %u matches, %.0fs playing (%.0fs near you), walked %.0f, throws %u (%u lined up), respawns/area changes %u, "
             "stuck %u, detours %u, routes followed %u, target changes %u, own view %s, now %s\n",
-            bot.controller + 1, bot.play_entries, bot.play_seconds, bot.distance_total, bot.fires, bot.aimed_throws, bot.area_changes,
+            bot.controller + 1, bot.play_entries, bot.play_seconds, bot.near_human_seconds, bot.distance_total, bot.fires, bot.aimed_throws, bot.area_changes,
             bot.stuck_count, bot.detours, bot.routes_found, bot.target_changes, (bot.own_cam != 0) ? "found" : "not found",
             bot.playing ? "in a match" : "waiting");
     }
