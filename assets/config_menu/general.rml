@@ -222,10 +222,10 @@
                         A test bot takes over the controller: it walks, turns, throws and jumps, and presses A and Start when nothing moves, to get through menus and cutscenes. It logs where it went, so a session log shows whether the game kept running. Turn it off here to play again. Always off when the game starts.
                     </p>
                     <p data-if="cur_config_index == 22">
-                        Adds computer players to Multiplayer. The game only offers Multiplayer when more than one controller is connected; each bot is an extra controller (players 2, 3 and 4) played by the app: it hunts the nearest other player, aims and throws.
+                        Computer players for Multiplayer (on by default, 3 bots). The game only offers Multiplayer when more than one controller is connected; each bot is an extra controller (players 2, 3 and 4) played by the app: it hunts the nearest other player, aims and throws.
                         <br/>
                         <br/>
-                        <b>Set this before choosing Multiplayer</b> (restart the game if Multiplayer was already greyed out). The bots leave the menus to you (set PLAYERS to include them) and start playing as soon as the split-screen match begins.
+                        Off greys Multiplayer out again. Changes apply straight away. The bots leave the menus to you (set PLAYERS to include them) and start playing as soon as the split-screen match begins.
                     </p>
                     <p data-if="cur_config_index == 5">
                         Allows the game to read controller input when out of focus.

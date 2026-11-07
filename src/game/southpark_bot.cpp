@@ -719,6 +719,11 @@ static bool test_input(uint16_t* buttons, float* x, float* y) {
         }
         if (token.rfind("X=", 0) == 0) sx = std::strtof(token.c_str() + 2, nullptr);
         if (token.rfind("Y=", 0) == 0) sy = std::strtof(token.c_str() + 2, nullptr);
+        if (token.rfind("BOTS=", 0) == 0) {   // change the Multiplayer Bots setting live
+            const int n = std::atoi(token.c_str() + 5);
+            goemon64::set_multiplayer_bots((n >= 3) ? goemon64::MultiplayerBots::Three : (n == 2) ? goemon64::MultiplayerBots::Two :
+                (n == 1) ? goemon64::MultiplayerBots::One : goemon64::MultiplayerBots::Off);
+        }
     }
     *buttons = b;
     *x = sx;

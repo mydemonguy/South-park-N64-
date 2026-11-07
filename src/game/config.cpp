@@ -282,7 +282,7 @@ bool save_general_config(const std::filesystem::path& path) {
     config_json["joystick_deadzone"] = recomp::get_joystick_deadzone();
     config_json["autosave_mode"] = goemon64::get_autosave_mode();
     config_json["view_distance"] = goemon64::get_view_distance();
-    config_json["multiplayer_bots"] = goemon64::get_multiplayer_bots();
+    config_json["multiplayer_ai_bots"] = goemon64::get_multiplayer_bots();
     config_json["camera_invert_mode"] = goemon64::get_camera_invert_mode();
     config_json["analog_cam_mode"] = goemon64::get_analog_cam_mode();
     config_json["touch_controls_mode"] = goemon64::get_touch_controls_mode();
@@ -311,7 +311,9 @@ void set_general_settings_from_json(const nlohmann::json& config_json) {
     // entries any more: force them off even if an older config saved them as on.
     goemon64::set_autosave_mode(goemon64::AutosaveMode::Off);
     goemon64::set_view_distance(from_or_default(config_json, "view_distance", goemon64::ViewDistance::Original));
-    goemon64::set_multiplayer_bots(from_or_default(config_json, "multiplayer_bots", goemon64::MultiplayerBots::Off));
+    // Default 3 bots, so Multiplayer can be picked straight away. (A new key: configs saved by
+    // the first build with this option stored "Off" before anyone had chosen it.)
+    goemon64::set_multiplayer_bots(from_or_default(config_json, "multiplayer_ai_bots", goemon64::MultiplayerBots::Three));
     goemon64::set_camera_invert_mode(from_or_default(config_json, "camera_invert_mode", goemon64::CameraInvertMode::InvertY));
     // The analog camera was a Goemon feature and has no menu entry any more: keep it off even if an
     // older config saved it as on (it silences the right stick's R mapping while active).

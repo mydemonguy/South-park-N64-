@@ -373,7 +373,7 @@ struct ControlOptionsContext {
     std::atomic<recomp::BackgroundInputMode> background_input_mode;
     std::atomic<goemon64::AutosaveMode> autosave_mode;
     std::atomic<goemon64::ViewDistance> view_distance;
-    std::atomic<goemon64::MultiplayerBots> multiplayer_bots{ goemon64::MultiplayerBots::Off };
+    std::atomic<goemon64::MultiplayerBots> multiplayer_bots{ goemon64::MultiplayerBots::Three };
     std::atomic<goemon64::AutoplayMode> autoplay_mode{ (std::getenv("SOUTHPARK_AUTOPLAY") != nullptr) ? goemon64::AutoplayMode::On : goemon64::AutoplayMode::Off };
     std::atomic<goemon64::CameraInvertMode> camera_invert_mode;
     std::atomic<goemon64::AnalogCamMode> analog_cam_mode;
