@@ -223,7 +223,17 @@ namespace {
         uint32_t tracked_polls = 0;
         int turn_sign = 0;        // +1/-1: the yaw change a positive stick X makes
         int pitch_sign = 0;       // +1/-1: the pitch change a positive stick Y makes
-        float prev_sx = 0.0f, prev_sy = 0.0f;
+        float prev_sx = 0.0f, prev_sy = 0.0f;   // the stick it last sent (smoothed)
+        uint32_t aimed_throws = 0;
+        // Getting closer? The closest it has come to its target lately, and when.
+        float hunt_best = 1e30f;
+        Clock::time_point hunt_best_time{};
+        Clock::time_point roam_until{};
+        uint32_t detours = 0;
+        // How much its view turned: to tell a steady bot from a twitchy one in logs.
+        bool have_yaw = false;
+        float last_yaw = 0.0f;
+        double yaw_travel = 0.0;
 
         uint32_t stuck_count = 0, menu_presses = 0, area_changes = 0, play_entries = 0;
         uint32_t fires = 0, jumps = 0, hunts = 0;
@@ -305,10 +315,12 @@ namespace {
         if (own_view(bot, view, cams, count)) {
             std::fprintf(stderr,
                 "[bot %d] %.0fs %s, at (%.0f, %.0f, %.0f), moved %.0f since last line, %.0f total; players seen %d, "
-                "times in play %u, hunts %u, stuck %u, menu presses %u, area changes %u, throws %u, jumps %u\n",
+                "times in play %u, hunts %u, stuck %u, menu presses %u, area changes %u, throws %u (%u lined up), jumps %u, detours %u, view turned %.0f deg/s\n",
                 bot.controller + 1, t, action_name(bot.action), double(view.pos.x), double(view.pos.y), double(view.pos.z),
                 bot.have_pos ? double(distance(view.pos, bot.report_pos)) : 0.0, bot.distance_total, count,
-                bot.play_entries, bot.hunts, bot.stuck_count, bot.menu_presses, bot.area_changes, bot.fires, bot.jumps);
+                bot.play_entries, bot.hunts, bot.stuck_count, bot.menu_presses, bot.area_changes, bot.fires, bot.aimed_throws, bot.jumps, bot.detours,
+                bot.yaw_travel * 57.2958 / std::max(1.0, seconds(bot.last_report, now)));
+            bot.yaw_travel = 0.0;
             bot.report_pos = view.pos;
         }
         else {
@@ -409,7 +421,10 @@ namespace {
             if ((bot.own_cam != 0) ? (cams[i] == bot.own_cam) : (i == bot.controller)) continue;
             View other{};
             if (!read_view(cams[i], other)) continue;
-            const float d = distance(other.pos, self.pos);
+            // Nearest counting height difference extra: a player on a ledge right above or
+            // below is not one to chase (the bot ends up circling under them).
+            const Vec3 to = other.pos - self.pos;
+            const float d = std::sqrt(to.x * to.x + to.z * to.z) + 2.0f * std::fabs(to.y);
             if ((d > 1.0f) && (d < best)) {
                 best = d;
                 target = other.pos;
@@ -429,6 +444,15 @@ namespace {
         int camera_count = 0;
         View view{};
         const bool have_view = own_view(bot, view, cams, camera_count);
+        if (have_view && bot.playing && (bot.own_cam != 0)) {
+            const float yaw = yaw_of(view.fwd);
+            if (bot.have_yaw) {
+                const float d = std::fabs(wrap_angle(yaw - bot.last_yaw));
+                if (d < 1.0f) bot.yaw_travel += d;
+            }
+            bot.last_yaw = yaw;
+            bot.have_yaw = true;
+        }
 
         // Progress check twice a second: movement, area changes (a big jump), being stuck.
         if (seconds(bot.last_check, now) >= 0.5) {
@@ -525,8 +549,12 @@ namespace {
             }
             else {
                 Vec3 target{};
-                if (have_view && (bot.own_cam != 0) && nearest_opponent(bot, view, cams, camera_count, target)) {
-                    if (bot.action != Action::Hunt) bot.hunts++;
+                if (have_view && (bot.own_cam != 0) && (now >= bot.roam_until) && nearest_opponent(bot, view, cams, camera_count, target)) {
+                    if (bot.action != Action::Hunt) {
+                        bot.hunts++;
+                        bot.hunt_best = 1e30f;
+                        bot.hunt_best_time = now;
+                    }
                     bot.strafe_dir = (rng() & 1) ? 1.0f : -1.0f;
                     begin(bot, Action::Hunt, 1.0 + rng_unit(), now);
                 }
@@ -549,14 +577,21 @@ namespace {
         switch (bot.action) {
         case Action::Walk:
             b |= BTN_C_UP;
-            // A gentle weave so it sweeps the view, and a nod until the tilt direction is
-            // known; each controller at its own rate so the bots' sticks are not in step.
-            sx = 0.2f * std::sin(float(t_total) * (0.7f + 0.23f * controller) + 1.9f * controller);
-            sy = (bot.pitch_sign == 0) ? 0.4f * std::sin(float(t_total) * (2.3f + 0.41f * controller)) : 0.0f;
+            // A slow weave, each controller at its own rate so the bots' sticks are not in
+            // step (that is how each tells its own view from the others).
+            sx = 0.12f * std::sin(float(t_total) * (0.7f + 0.23f * controller) + 1.9f * controller);
+            if ((bot.own_cam != 0) && (bot.pitch_sign == 0)) {
+                // One short look up and back down to learn which way the stick tilts the view.
+                sy = (t_action < 0.25) ? 0.5f : (t_action < 0.5) ? -0.5f : 0.0f;
+            }
+            else if (have_view && (bot.pitch_sign != 0)) {
+                sy = std::clamp(-pitch_of(view.fwd) * 1.5f * float(bot.pitch_sign), -0.4f, 0.4f);   // keep level
+                if (std::fabs(sy) < 0.05f) sy = 0.0f;
+            }
             break;
         case Action::Turn:
             b |= BTN_C_UP;
-            sx = 0.8f * bot.turn_dir;
+            sx = 0.5f * bot.turn_dir;
             break;
         case Action::Unstick:
             b |= (t_action < 0.5) ? BTN_C_DOWN : BTN_C_UP;
@@ -571,22 +606,48 @@ namespace {
                 const float yaw_err = wrap_angle(yaw_of(to) - yaw_of(view.fwd));
                 const float pitch_err = pitch_of(to) - pitch_of(view.fwd);
                 const float range = length(to);
+                const float flat = std::sqrt(to.x * to.x + to.z * to.z);   // across the ground
+                const bool other_level = std::fabs(to.y) > 200.0f;
                 // Turn toward the target. Until the turn direction is known, sweep one way:
                 // track_cameras picks the sign up from the response.
+                // Proportional, gentle, with a dead zone once on target so the view settles
+                // instead of hunting back and forth.
                 const int ts = bot.turn_sign;
-                sx = (ts != 0) ? std::clamp(yaw_err * 2.5f * float(ts), -1.0f, 1.0f) : 0.8f;
+                sx = (ts != 0) ? std::clamp(yaw_err * 1.4f * float(ts), -0.75f, 0.75f) : 0.5f;
+                if (std::fabs(yaw_err) < 0.04f) sx = 0.0f;
+                if (flat < 150.0f) sx = 0.0f;   // nearly overhead: the direction is meaningless
                 const int ps = bot.pitch_sign;
-                if ((ps != 0) && (std::fabs(sx) < 0.3f)) {
-                    sy = std::clamp(pitch_err * 2.0f * float(ps), -0.6f, 0.6f);
+                if ((ps != 0) && (std::fabs(yaw_err) < 0.4f)) {
+                    sy = std::clamp(pitch_err * 1.2f * float(ps), -0.4f, 0.4f);
+                    if (std::fabs(pitch_err) < 0.05f) sy = 0.0f;
                 }
-                aimed = (ts != 0) && (std::fabs(yaw_err) < 0.12f) && (range < 3000.0f);
-                if (range > 350.0f) {
+                // Throw only when lined up and close: further off there is usually a wall or
+                // a building in the way, and the bot cannot see those.
+                aimed = (ts != 0) && (std::fabs(yaw_err) < 0.07f) && (range < 700.0f) &&
+                    ((ps == 0) || (std::fabs(pitch_err) < 0.15f));
+                // No closer in 6 s while still far off: something is in the way. Roam for a
+                // few seconds to find another way round.
+                if (flat < bot.hunt_best - 80.0f) {
+                    bot.hunt_best = flat;
+                    bot.hunt_best_time = now;
+                }
+                else if ((flat > 500.0f) && (seconds(bot.hunt_best_time, now) > 6.0)) {
+                    bot.detours++;
+                    bot.roam_until = now + std::chrono::milliseconds(3000 + int(rng_unit() * 3000.0));
+                    bot.turn_dir = (rng() & 1) ? 1.0f : -1.0f;
+                    begin(bot, Action::Turn, 0.6 + 0.6 * rng_unit(), now);
+                }
+                // Close in across the ground; keep a distance from someone on another level
+                // rather than walking underneath them.
+                const float near_limit = other_level ? 600.0f : 120.0f;
+                const float far_limit = other_level ? 900.0f : 350.0f;
+                if ((flat > far_limit) && (std::fabs(yaw_err) < 1.2f)) {
                     b |= BTN_C_UP;
                 }
-                else if (range < 120.0f) {
+                else if (flat < near_limit) {
                     b |= BTN_C_DOWN;
                 }
-                if ((range < 1200.0f) && (std::fmod(t_total, 2.6) < 1.2)) {
+                if (!other_level && (range < 900.0f) && (std::fmod(t_total + controller * 0.9, 3.2) < 0.9)) {
                     b |= (bot.strafe_dir > 0) ? BTN_C_RIGHT : BTN_C_LEFT;   // dodge while fighting
                 }
             }
@@ -621,16 +682,18 @@ namespace {
             break;
         }
 
+        // Ease the stick toward what was asked for, like a thumb would, so the view turns
+        // smoothly instead of snapping.
+        sx = bot.prev_sx + (sx - bot.prev_sx) * 0.35f;
+        sy = bot.prev_sy + (sy - bot.prev_sy) * 0.35f;
+        if (std::fabs(sx) < 0.02f) sx = 0.0f;
+        if (std::fabs(sy) < 0.02f) sy = 0.0f;
+
         if (bot.playing) {
-            if (bot.action == Action::Hunt) {
-                // Throw while lined up.
-                if (aimed && (std::fmod(t_total, 0.5) < 0.12)) b |= BTN_Z;
-            }
-            else if (std::fmod(t_total, 1.5) < 0.12) {
+            // Throw only at a target it is lined up on, about once every 0.7 s.
+            if (aimed && (std::fmod(t_total + controller * 0.3, 0.7) < 0.12)) {
                 b |= BTN_Z;
-            }
-            if (std::fmod(t_total + controller * 1.7, 7.0) < 0.12) {
-                b |= BTN_R;
+                if (!(bot.prev_buttons & BTN_Z)) bot.aimed_throws++;
             }
             track_cameras(bot, cams, camera_count);
         }
