@@ -32,6 +32,8 @@ namespace goemon64 {
     std::string get_game_thread_name(const OSThread* t);
 }
 
+void southpark_bot_summary();     // src/game/southpark_bot.cpp
+
 namespace southpark::status {
     namespace {
         std::atomic<uint32_t> gfx_tasks{0};
@@ -226,6 +228,7 @@ namespace southpark::status {
             return;
         }
         std::fprintf(stderr, "[status] snapshot: %s\n", why);
+        southpark_bot_summary();
         report(rdram, (long)std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - start_time).count(), true);
     }
 

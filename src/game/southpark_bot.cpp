@@ -242,6 +242,8 @@ namespace {
         uint32_t target_cam = 0;
         Clock::time_point target_since{};
         uint32_t target_changes = 0;
+        double play_seconds = 0.0;   // time in matches this session
+        Clock::time_point last_poll{};
         // How much its view turned: to tell a steady bot from a twitchy one in logs.
         bool have_yaw = false;
         float last_yaw = 0.0f;
@@ -624,6 +626,12 @@ namespace {
             start_bot(bot, controller, now);
         }
 
+        if (bot.playing && (controller != 0)) {
+            const double dt = seconds(bot.last_poll, now);
+            if (dt < 1.0) bot.play_seconds += dt;
+        }
+        bot.last_poll = now;
+
         std::array<uint32_t, MaxPlayers> cams{};
         int camera_count = 0;
         View view{};
@@ -945,7 +953,9 @@ namespace {
         if (!bot.playing && (pressed & (BTN_A | BTN_START))) bot.menu_presses++;
         bot.prev_buttons = b;
 
-        if (seconds(bot.last_report, now) >= 10.0) {
+        // Every 10 s in a match; while waiting, once a minute (the shared log keeps only
+        // its start and end, so idle lines would push the useful ones out).
+        if (seconds(bot.last_report, now) >= ((bot.playing || (controller == 0)) ? 10.0 : 60.0)) {
             report(bot, now);
             bot.last_report = now;
         }
@@ -959,6 +969,28 @@ namespace {
 
 // Hook (southpark.us.toml, func_0025B68C): the game's per-frame camera update, once per
 // camera (one per player in split-screen).
+int southpark_bot_controllers();
+
+// A summary of the bots' matches this session, for the end of the session log (the log
+// shared from the app keeps only its start and end, so the match lines are often cut).
+void southpark_bot_summary() {
+    std::lock_guard lock{ bots_mutex };
+    int shown = 0;
+    for (const Bot& bot : bots) {
+        if (!bot.active || (bot.controller == 0) || (bot.play_entries == 0)) continue;
+        shown++;
+        std::fprintf(stderr,
+            "[match] bot %d this session: %u matches, %.0fs playing, walked %.0f, throws %u (%u lined up), respawns/area changes %u, "
+            "stuck %u, detours %u, routes followed %u, target changes %u, own view %s, now %s\n",
+            bot.controller + 1, bot.play_entries, bot.play_seconds, bot.distance_total, bot.fires, bot.aimed_throws, bot.area_changes,
+            bot.stuck_count, bot.detours, bot.routes_found, bot.target_changes, (bot.own_cam != 0) ? "found" : "not found",
+            bot.playing ? "in a match" : "waiting");
+    }
+    if (shown == 0) {
+        std::fprintf(stderr, "[match] no multiplayer match with bots this session (bots: %d)\n", southpark_bot_controllers());
+    }
+}
+
 extern "C" void southpark_bot_camera(uint8_t* rdram, uint64_t camera) {
     camera_rdram.store(rdram, std::memory_order_relaxed);
     const uint32_t addr = uint32_t(camera);
