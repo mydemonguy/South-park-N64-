@@ -51,6 +51,11 @@
 #include "librecomp/addresses.hpp"
 #include "ultramodern/ultramodern.hpp"
 #include "ultramodern/error_handling.hpp"
+#include "goemon_config.h"
+
+#include <array>
+#include <filesystem>
+#include <fstream>
 
 namespace {
     constexpr uint32_t OS_READ = 0;
@@ -524,7 +529,192 @@ extern "C" void sp_cart_io_read(uint8_t* rdram, recomp_context* ctx) {
 }
 
 // ---- SI internals still called by recompiled code (Controller Pak / reset paths) ----
-// Every command is answered with "no response", i.e. no accessory present.
+//
+// South Park saves to a Controller Pak through its own copy of libultra's pak code (block 2,
+// 0x0040F314.., with __osContRamRead/Write at 0x0029B8D0/0x0029BC88 and the data CRC at
+// 0x0029C088), which talks to the PIF through __osSiRawStartDma. The app reports an
+// accessory in controller 1 (src/game/input.cpp), so the game expects one there: every
+// command to controller 1 is answered as a 32 KB Controller Pak, kept in
+// controller_pak_1.mpk in the app folder (a standard .mpk image). Other channels answer
+// "no response".
+
+namespace {
+    constexpr size_t PakSize = 0x8000;
+    std::mutex pak_mutex;
+    std::array<uint8_t, PakSize> pak_data{};
+    bool pak_loaded = false;
+    uint8_t si_pending[64];
+    bool si_pending_valid = false;
+    uint32_t pak_reads = 0, pak_writes = 0;
+
+    // The game's __osContDataCrc (func_0029C088): 33 rounds of 8 bits, polynomial 0x85,
+    // the last round shifting in zeros.
+    uint8_t pak_data_crc(const uint8_t* data) {
+        uint32_t crc = 0;
+        for (int byte = 0; byte <= 32; byte++) {
+            for (int bit = 7; bit >= 0; bit--) {
+                const uint32_t xor_value = (crc & 0x80) ? 0x85 : 0;
+                crc <<= 1;
+                if (byte != 32) {
+                    crc |= (data[byte] >> bit) & 1;
+                }
+                crc ^= xor_value;
+            }
+        }
+        return uint8_t(crc);
+    }
+
+    // A freshly formatted pak, laid out the way libultra expects (big-endian): ID block
+    // with its checksums at 0x20 and backups at 0x60/0x80/0xC0, the inode table (page 1)
+    // and its backup (page 2) with every data page free, an empty note directory.
+    void pak_format(uint8_t* m) {
+        std::memset(m, 0, PakSize);
+        for (int i = 0; i < 32; i++) {
+            m[i] = (i == 0) ? 0x81 : uint8_t(i);
+        }
+        uint8_t id[32] = {
+            0xFF, 0xFF, 0xFF, 0xFF,  0x05, 0x1A, 0x5F, 0x13,     // repaired, random
+            0, 0, 0, 0, 0, 0, 0, 0,                             // serial
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+            0xFF, 0xFF, 0x01, 0xFF,                             // device id, banks, version
+            0, 0, 0, 0                                          // checksum, inverted
+        };
+        uint32_t sum = 0;
+        for (int i = 0; i < 28; i += 2) {
+            sum += (uint32_t(id[i]) << 8) | id[i + 1];
+        }
+        sum &= 0xFFFF;
+        const uint32_t inverted = (0xFFF2 - sum) & 0xFFFF;
+        id[28] = uint8_t(sum >> 8); id[29] = uint8_t(sum);
+        id[30] = uint8_t(inverted >> 8); id[31] = uint8_t(inverted);
+        for (int area : { 0x20, 0x60, 0x80, 0xC0 }) {
+            std::memcpy(m + area, id, sizeof(id));
+        }
+        // Inode table: entries 5..127 free (0x0003); entry 0's low byte is the byte sum of
+        // entries 5..127.
+        for (int page : { 0x100, 0x200 }) {
+            uint32_t inode_sum = 0;
+            for (int entry = 1; entry < 128; entry++) {
+                m[page + entry * 2] = 0x00;
+                m[page + entry * 2 + 1] = 0x03;
+                if (entry >= 5) {
+                    inode_sum += 0x03;
+                }
+            }
+            m[page] = 0x00;
+            m[page + 1] = uint8_t(inode_sum);
+        }
+    }
+
+    std::filesystem::path pak_path() {
+        return goemon64::get_app_folder_path() / "controller_pak_1.mpk";
+    }
+
+    // pak_mutex held.
+    void pak_load() {
+        if (pak_loaded) {
+            return;
+        }
+        pak_loaded = true;
+        std::ifstream in(pak_path(), std::ios::binary);
+        if (in && in.read(reinterpret_cast<char*>(pak_data.data()), PakSize) && (in.gcount() == std::streamsize(PakSize))) {
+            std::fprintf(stderr, "[pak] Controller Pak loaded from %s\n", pak_path().string().c_str());
+            return;
+        }
+        pak_format(pak_data.data());
+        std::fprintf(stderr, "[pak] new formatted Controller Pak (saved to %s on the first write)\n", pak_path().string().c_str());
+    }
+
+    // pak_mutex held. Written whole (32 KB) through a temporary file, so an interrupted
+    // write never leaves a half-written pak.
+    void pak_save() {
+        const std::filesystem::path path = pak_path();
+        std::filesystem::path temp = path;
+        temp += ".tmp";
+        {
+            std::ofstream out(temp, std::ios::binary | std::ios::trunc);
+            if (!out.write(reinterpret_cast<const char*>(pak_data.data()), PakSize)) {
+                std::fprintf(stderr, "[pak] could not write %s\n", temp.string().c_str());
+                return;
+            }
+        }
+        std::error_code ec;
+        std::filesystem::rename(temp, path, ec);
+        if (ec) {
+            std::fprintf(stderr, "[pak] could not replace %s: %s\n", path.string().c_str(), ec.message().c_str());
+        }
+    }
+
+    // Runs the PIF commands in `cmd` and writes the answers into `out` (both 64 bytes).
+    void pif_process(const uint8_t* cmd, uint8_t* out) {
+        std::lock_guard lock{ pak_mutex };
+        std::memcpy(out, cmd, 64);
+        bool pak_written = false;
+        int channel = 0;
+        int i = 0;
+        while (i < 63) {
+            const uint8_t tx_byte = cmd[i];
+            if (tx_byte == 0xFE) break;                 // end of commands
+            if (tx_byte == 0xFF) { i++; continue; }     // padding
+            if (tx_byte == 0x00) { channel++; i++; continue; } // skip this channel
+            const int tx = tx_byte & 0x3F;
+            const int rx = cmd[i + 1] & 0x3F;
+            const int tx_at = i + 2;
+            const int rx_at = tx_at + tx;
+            if (rx_at + rx > 63) break;
+            const uint8_t command = (tx > 0) ? cmd[tx_at] : 0xFF;
+
+            if (channel != 0) {
+                out[i + 1] = uint8_t(cmd[i + 1] | 0x80);        // no response
+            }
+            else if (((command == 0x00) || (command == 0xFF)) && (rx >= 3)) {
+                // Status: a standard controller with an accessory inserted.
+                out[rx_at] = 0x05; out[rx_at + 1] = 0x00; out[rx_at + 2] = 0x01;
+            }
+            else if ((command == 0x01) && (rx >= 4)) {
+                // Buttons (the game reads them through osContGetReadData; answer neutral).
+                std::memset(out + rx_at, 0, 4);
+            }
+            else if ((command == 0x02) && (tx >= 3) && (rx >= 33)) {
+                pak_load();
+                const uint32_t address = ((uint32_t(cmd[tx_at + 1]) << 8) | cmd[tx_at + 2]) & 0xFFE0;
+                if (address < PakSize) {
+                    std::memcpy(out + rx_at, pak_data.data() + address, 32);
+                }
+                else {
+                    std::memset(out + rx_at, 0, 32);           // accessory id area: not a Rumble Pak
+                }
+                out[rx_at + 32] = pak_data_crc(out + rx_at);
+                pak_reads++;
+            }
+            else if ((command == 0x03) && (tx >= 35) && (rx >= 1)) {
+                pak_load();
+                const uint32_t address = ((uint32_t(cmd[tx_at + 1]) << 8) | cmd[tx_at + 2]) & 0xFFE0;
+                const uint8_t* data = cmd + tx_at + 3;
+                if (address < PakSize) {
+                    if (std::memcmp(pak_data.data() + address, data, 32) != 0) {
+                        std::memcpy(pak_data.data() + address, data, 32);
+                        pak_written = true;
+                    }
+                }
+                out[rx_at] = pak_data_crc(data);
+                if ((pak_writes++ % 64) == 0) {
+                    std::fprintf(stderr, "[pak] write #%u at 0x%04X\n", pak_writes, address);
+                }
+            }
+            else {
+                out[i + 1] = uint8_t(cmd[i + 1] | 0x80);        // unknown command: no response
+            }
+
+            channel++;
+            i = rx_at + rx;
+        }
+        out[63] = 0;
+        if (pak_written) {
+            pak_save();
+        }
+    }
+}
 
 extern "C" void __osSiGetAccess_recomp(uint8_t* rdram, recomp_context* ctx) { (void)rdram; (void)ctx; }
 extern "C" void __osSiRelAccess_recomp(uint8_t* rdram, recomp_context* ctx) { (void)rdram; (void)ctx; }
@@ -537,21 +727,27 @@ extern "C" void __osContGetInitData_recomp(uint8_t* rdram, recomp_context* ctx) 
     MEM_B(0, ctx->r4) = 0;
 }
 
-// __osSiRawStartDma(s32 direction, void* dramAddr): 64-byte PIF RAM transfer.
+// __osSiRawStartDma(s32 direction, void* dramAddr): 64-byte PIF RAM transfer. A write
+// hands the PIF its commands; the read that follows collects the answers.
 extern "C" void __osSiRawStartDma_recomp(uint8_t* rdram, recomp_context* ctx) {
     uint32_t direction = (uint32_t)ctx->r4;
     gpr buf = ctx->r5;
     if (direction == OS_READ) {
-        int i = 0;
-        while (i < 63) {
-            uint8_t tx = (uint8_t)MEM_BU(i, buf);
-            if (tx == 0xFE) break;          // end of commands
-            if (tx == 0xFF || tx == 0x00) { i++; continue; } // padding / skip channel
-            uint8_t rx = (uint8_t)MEM_BU(i + 1, buf);
-            MEM_B(i + 1, buf) = (int8_t)(rx | 0x80); // CONT_NO_RESPONSE_ERROR
-            i += 2 + (tx & 0x3F) + (rx & 0x3F);
+        uint8_t cmd[64], out[64];
+        for (int i = 0; i < 64; i++) {
+            cmd[i] = si_pending_valid ? si_pending[i] : (uint8_t)MEM_BU(i, buf);
         }
-        MEM_B(63, buf) = 0;
+        si_pending_valid = false;
+        pif_process(cmd, out);
+        for (int i = 0; i < 64; i++) {
+            MEM_B(i, buf) = (int8_t)out[i];
+        }
+    }
+    else {
+        for (int i = 0; i < 64; i++) {
+            si_pending[i] = (uint8_t)MEM_BU(i, buf);
+        }
+        si_pending_valid = true;
     }
     int32_t mq, msg;
     {
