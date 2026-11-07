@@ -17179,11 +17179,11 @@ L_002486B8:
     // 0x002486D0: addiu       $sp, $sp, 0x18
     ctx->r29 = ADD32(ctx->r29, 0X18);
 ;}
-RECOMP_FUNC void func_002486D4(uint8_t* rdram, recomp_context* ctx) {
+// Entry point after a return; the word before it (0x002486D4) is a stray instruction the
+// game never executes. Reached through a function table.
+RECOMP_FUNC void func_002486D8(uint8_t* rdram, recomp_context* ctx) {
     uint64_t hi = 0, lo = 0, result = 0;
     int c1cs = 0;
-    // 0x002486D4: lwc1        $f14, -0x71F0($at)
-    ctx->f14.u32l = MEM_W(ctx->r1, -0X71F0);
     // 0x002486D8: lui         $v1, 0xFEFF
     ctx->r3 = S32(0XFEFF << 16);
     // 0x002486DC: sw          $zero, 0x68($a1)

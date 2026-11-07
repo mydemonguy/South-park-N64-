@@ -272,6 +272,13 @@ def after_return_starts(s, funcs):
                 if ins.isJrRa():
                     break
             if not loops_back:
+                # A word that reads $at (the assembler temporary, never set when a function
+                # is entered) is not a function's first instruction but a stray word left
+                # between two functions: the entry is the next word. 0x004073C4
+                # (addu $at,$at,$v0) and 0x002486D4 (lwc1 $f14,-0x71F0($at)) are such
+                # words; the game's tables point at 0x004073C8 and 0x002486D8.
+                if ((s.word(v) >> 21) & 0x1F) == 1 and v + 4 < end and (v + 4) not in funcs:
+                    v += 4
                 funcs[v] = end - v
                 added += 1
     return added

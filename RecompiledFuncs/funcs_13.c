@@ -24567,11 +24567,11 @@ RECOMP_FUNC void func_00407394(uint8_t* rdram, recomp_context* ctx) {
     // 0x004073C0: addiu       $sp, $sp, 0x18
     ctx->r29 = ADD32(ctx->r29, 0X18);
 ;}
-RECOMP_FUNC void func_004073C4(uint8_t* rdram, recomp_context* ctx) {
+// Entry point after a return; the word before it (0x004073C4) is a stray instruction the
+// game never executes. Reached through a function table.
+RECOMP_FUNC void func_004073C8(uint8_t* rdram, recomp_context* ctx) {
     uint64_t hi = 0, lo = 0, result = 0;
     int c1cs = 0;
-    // 0x004073C4: addu        $at, $at, $v0
-    ctx->r1 = ADD32(ctx->r1, ctx->r2);
     // 0x004073C8: lui         $v0, 0x8010
     ctx->r2 = S32(0X8010 << 16);
     // 0x004073CC: lw          $v0, 0x371C($v0)
