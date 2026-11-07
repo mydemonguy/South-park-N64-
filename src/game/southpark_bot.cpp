@@ -36,7 +36,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <mutex>
+#include <queue>
+#include <vector>
 
 #include "goemon_config.h"
 
@@ -230,6 +233,15 @@ namespace {
         Clock::time_point hunt_best_time{};
         Clock::time_point roam_until{};
         uint32_t detours = 0;
+        // Following a route through the learned map.
+        std::vector<int> route;
+        size_t route_step = 0;
+        uint32_t route_generation = 0;
+        Clock::time_point route_time{};
+        uint32_t routes_found = 0;
+        uint32_t target_cam = 0;
+        Clock::time_point target_since{};
+        uint32_t target_changes = 0;
         // How much its view turned: to tell a steady bot from a twitchy one in logs.
         bool have_yaw = false;
         float last_yaw = 0.0f;
@@ -264,6 +276,161 @@ namespace {
             return false;
         }
         return read_view(cams[bot.controller], view);
+    }
+
+    // ---- Learned paths ----
+    //
+    // The bots cannot see walls, but every place a player has walked is walkable. So each
+    // live view's position is sampled as it moves, building a shared map of points joined in
+    // the direction they were walked (a drop off a ledge is one way). To reach a player a bot
+    // looks for a route through that map and follows it, rather than walking straight into a
+    // wall. The map starts empty each match and fills in as everyone moves around.
+
+    struct NavNode {
+        Vec3 pos;
+        std::array<uint16_t, 8> out;
+        uint8_t out_count;
+    };
+
+    struct NavMap {
+        std::vector<NavNode> nodes;
+        std::array<uint32_t, MaxPlayers> cam{};
+        std::array<int, MaxPlayers> last_node{};
+        std::array<Vec3, MaxPlayers> last_pos{};
+        Clock::time_point last_update{};
+        uint32_t generation = 0;   // bumped when the map is cleared
+    };
+    NavMap nav;
+
+    constexpr size_t NavMaxNodes = 4000;
+    constexpr float NavSpacing = 90.0f;   // a new point every this far
+    constexpr float NavMerge = 70.0f;     // closer than this to an old point: the same point
+
+    float flat_distance(const Vec3& a, const Vec3& b) {
+        const float dx = a.x - b.x, dz = a.z - b.z;
+        return std::sqrt(dx * dx + dz * dz);
+    }
+
+    // The point nearest pos (on about the same level), or -1.
+    int nav_nearest(const Vec3& pos, float max_dist) {
+        int best = -1;
+        float best_d = max_dist;
+        for (size_t i = 0; i < nav.nodes.size(); i++) {
+            const NavNode& n = nav.nodes[i];
+            if (std::fabs(n.pos.y - pos.y) > 120.0f) continue;
+            const float d = flat_distance(n.pos, pos);
+            if (d < best_d) {
+                best_d = d;
+                best = int(i);
+            }
+        }
+        return best;
+    }
+
+    void nav_link(int from, int to) {
+        if ((from < 0) || (to < 0) || (from == to)) return;
+        NavNode& n = nav.nodes[size_t(from)];
+        for (uint8_t i = 0; i < n.out_count; i++) {
+            if (n.out[i] == uint16_t(to)) return;
+        }
+        if (n.out_count < n.out.size()) {
+            n.out[n.out_count++] = uint16_t(to);
+        }
+    }
+
+    void nav_clear() {
+        nav.nodes.clear();
+        nav.cam = {};
+        nav.last_node.fill(-1);
+        nav.generation++;
+        std::fprintf(stderr, "[bot] path map cleared for a new match\n");
+    }
+
+    // Sample every live view, ten times a second.
+    void nav_update(const std::array<uint32_t, MaxPlayers>& cams, int count, Clock::time_point now) {
+        if (seconds(nav.last_update, now) < 0.1) return;
+        nav.last_update = now;
+        for (int i = 0; i < count; i++) {
+            View v{};
+            if (!read_view(cams[i], v)) continue;
+            int slot = -1;
+            for (int s = 0; s < MaxPlayers; s++) if (nav.cam[s] == cams[i]) slot = s;
+            if (slot < 0) {
+                for (int s = 0; s < MaxPlayers; s++) {
+                    bool live = false;
+                    for (int j = 0; j < count; j++) live |= (nav.cam[s] == cams[j]);
+                    if (!live) { slot = s; break; }
+                }
+                if (slot < 0) continue;
+                nav.cam[slot] = cams[i];
+                nav.last_node[slot] = -1;
+            }
+            const float moved = distance(v.pos, nav.last_pos[slot]);
+            if ((nav.last_node[slot] >= 0) && (moved < NavSpacing)) continue;
+            int node = nav_nearest(v.pos, NavMerge);
+            if ((node < 0) && (nav.nodes.size() < NavMaxNodes)) {
+                nav.nodes.push_back(NavNode{ v.pos, {}, 0 });
+                node = int(nav.nodes.size()) - 1;
+            }
+            if (node < 0) continue;
+            // Walked here from the last point: joined. A big jump is a respawn, not a path.
+            if ((nav.last_node[slot] >= 0) && (moved < 300.0f)) {
+                nav_link(nav.last_node[slot], node);
+            }
+            nav.last_node[slot] = node;
+            nav.last_pos[slot] = v.pos;
+        }
+    }
+
+    // A route of points from near `from` to near `to`, or empty. Works backwards from the
+    // target: every point from which the target can be reached gets its distance to go and
+    // the next point on the way. The route then starts at whichever such point is best to
+    // walk to first (near the bot and close to the target), so a bot that has never been on
+    // a known path still heads for the nearest one that leads where it wants to go.
+    std::vector<int> nav_route(const Vec3& from, const Vec3& to) {
+        std::vector<int> route;
+        const int goal = nav_nearest(to, 300.0f);
+        if (goal < 0) return route;
+        const size_t n = nav.nodes.size();
+        std::vector<std::vector<uint16_t>> into(n);   // edges reversed
+        for (size_t a = 0; a < n; a++) {
+            for (uint8_t e = 0; e < nav.nodes[a].out_count; e++) into[nav.nodes[a].out[e]].push_back(uint16_t(a));
+        }
+        std::vector<float> to_go(n, 1e30f);
+        std::vector<int> next(n, -1);
+        using Entry = std::pair<float, int>;
+        std::priority_queue<Entry, std::vector<Entry>, std::greater<Entry>> open;
+        to_go[size_t(goal)] = 0.0f;
+        open.push({ 0.0f, goal });
+        while (!open.empty()) {
+            const auto [d, cur] = open.top();
+            open.pop();
+            if (d > to_go[size_t(cur)]) continue;
+            for (const uint16_t a : into[size_t(cur)]) {
+                const float c = d + distance(nav.nodes[a].pos, nav.nodes[size_t(cur)].pos);
+                if (c < to_go[a]) {
+                    to_go[a] = c;
+                    next[a] = cur;
+                    open.push({ c, int(a) });
+                }
+            }
+        }
+        // Where to join: walking there straight counts extra, it may not be clear.
+        int start = -1;
+        float best = 1e30f;
+        for (size_t a = 0; a < n; a++) {
+            if ((to_go[a] >= 1e29f) || (std::fabs(nav.nodes[a].pos.y - from.y) > 120.0f)) continue;
+            const float score = 2.0f * flat_distance(nav.nodes[a].pos, from) + to_go[a];
+            if (score < best) {
+                best = score;
+                start = int(a);
+            }
+        }
+        if ((start < 0) || (start == goal)) return route;
+        // Only worth it if it beats walking straight at the target.
+        if (best > 4.0f * distance(from, to)) return route;
+        for (int c = start; c >= 0; c = next[size_t(c)]) route.push_back(c);
+        return route;
     }
 
     // Probe snapshots of every live camera's position.
@@ -315,10 +482,10 @@ namespace {
         if (own_view(bot, view, cams, count)) {
             std::fprintf(stderr,
                 "[bot %d] %.0fs %s, at (%.0f, %.0f, %.0f), moved %.0f since last line, %.0f total; players seen %d, "
-                "times in play %u, hunts %u, stuck %u, menu presses %u, area changes %u, throws %u (%u lined up), jumps %u, detours %u, view turned %.0f deg/s\n",
+                "times in play %u, hunts %u, stuck %u, menu presses %u, area changes %u, throws %u (%u lined up), jumps %u, detours %u, routes %u (map %zu points), target changes %u, view turned %.0f deg/s\n",
                 bot.controller + 1, t, action_name(bot.action), double(view.pos.x), double(view.pos.y), double(view.pos.z),
                 bot.have_pos ? double(distance(view.pos, bot.report_pos)) : 0.0, bot.distance_total, count,
-                bot.play_entries, bot.hunts, bot.stuck_count, bot.menu_presses, bot.area_changes, bot.fires, bot.aimed_throws, bot.jumps, bot.detours,
+                bot.play_entries, bot.hunts, bot.stuck_count, bot.menu_presses, bot.area_changes, bot.fires, bot.aimed_throws, bot.jumps, bot.detours, bot.routes_found, nav.nodes.size(), bot.target_changes,
                 bot.yaw_travel * 57.2958 / std::max(1.0, seconds(bot.last_report, now)));
             bot.yaw_travel = 0.0;
             bot.report_pos = view.pos;
@@ -413,25 +580,42 @@ namespace {
         }
     }
 
-    // The nearest other player's eye, if any other player's camera is live.
-    bool nearest_opponent(const Bot& bot, const View& self, const std::array<uint32_t, MaxPlayers>& cams, int count, Vec3& target) {
+    // Who to go after. Mostly the nearest player (a player on another level counts as
+    // further), but: the person playing counts as nearer, so the bots come for them and do
+    // not only fight each other; a bot sticks with its target for a while rather than
+    // flipping between two; and after half a minute on the same one it gets restless and
+    // looks for someone else, so the bots move around the map instead of pairing off.
+    bool choose_target(Bot& bot, const View& self, const std::array<uint32_t, MaxPlayers>& cams, int count,
+                       Clock::time_point now, Vec3& target) {
         float best = 1e30f;
-        bool found = false;
+        uint32_t best_cam = 0;
         for (int i = 0; i < count; i++) {
             if ((bot.own_cam != 0) ? (cams[i] == bot.own_cam) : (i == bot.controller)) continue;
             View other{};
             if (!read_view(cams[i], other)) continue;
-            // Nearest counting height difference extra: a player on a ledge right above or
-            // below is not one to chase (the bot ends up circling under them).
             const Vec3 to = other.pos - self.pos;
-            const float d = std::sqrt(to.x * to.x + to.z * to.z) + 2.0f * std::fabs(to.y);
-            if ((d > 1.0f) && (d < best)) {
-                best = d;
+            float cost = std::sqrt(to.x * to.x + to.z * to.z) + 2.0f * std::fabs(to.y);
+            if (cost < 1.0f) continue;
+            bool human = true;   // a view no bot has claimed is a person's
+            for (const Bot& b : bots) human &= !(b.active && (b.controller != 0) && (b.own_cam == cams[i]));
+            if (human) cost *= 0.6f;
+            if (cams[i] == bot.target_cam) {
+                const double on = seconds(bot.target_since, now);
+                cost *= (on < 30.0) ? 0.7f : float(1.0 + (on - 30.0) / 10.0);
+            }
+            if (cost < best) {
+                best = cost;
+                best_cam = cams[i];
                 target = other.pos;
-                found = true;
             }
         }
-        return found;
+        if (best_cam == 0) return false;
+        if (best_cam != bot.target_cam) {
+            bot.target_cam = best_cam;
+            bot.target_since = now;
+            bot.target_changes++;
+        }
+        return true;
     }
 
     bool run_bot(Bot& bot, int controller, uint16_t* buttons, float* x, float* y) {
@@ -489,6 +673,9 @@ namespace {
             if (split) {
                 bot.split_seen = now;
                 if (!bot.playing) {
+                    bool any_playing = false;
+                    for (const Bot& other : bots) any_playing |= (other.active && other.playing && (other.controller != 0));
+                    if (!any_playing) nav_clear();
                     bot.playing = true;
                     bot.play_entries++;
                     bot.last_moved = now;
@@ -549,7 +736,7 @@ namespace {
             }
             else {
                 Vec3 target{};
-                if (have_view && (bot.own_cam != 0) && (now >= bot.roam_until) && nearest_opponent(bot, view, cams, camera_count, target)) {
+                if (have_view && (bot.own_cam != 0) && (now >= bot.roam_until) && choose_target(bot, view, cams, camera_count, now, target)) {
                     if (bot.action != Action::Hunt) {
                         bot.hunts++;
                         bot.hunt_best = 1e30f;
@@ -601,13 +788,60 @@ namespace {
             break;
         case Action::Hunt: {
             Vec3 target{};
-            if (have_view && nearest_opponent(bot, view, cams, camera_count, target)) {
+            if (have_view && choose_target(bot, view, cams, camera_count, now, target)) {
                 const Vec3 to = target - view.pos;
                 const float yaw_err = wrap_angle(yaw_of(to) - yaw_of(view.fwd));
                 const float pitch_err = pitch_of(to) - pitch_of(view.fwd);
                 const float range = length(to);
                 const float flat = std::sqrt(to.x * to.x + to.z * to.z);   // across the ground
                 const bool other_level = std::fabs(to.y) > 200.0f;
+
+                // Far off or on another level: find a way there through the places players
+                // have walked, refreshed every second, and head for the next point on it.
+                bool following = false;
+                Vec3 waypoint{};
+                if ((flat > 500.0f) || other_level) {
+                    if ((bot.route_generation != nav.generation) || (seconds(bot.route_time, now) > 1.0)) {
+                        bot.route = nav_route(view.pos, target);
+                        bot.route_step = 0;
+                        bot.route_time = now;
+                        bot.route_generation = nav.generation;
+                        if (!bot.route.empty()) bot.routes_found++;
+                    }
+                    // Skip points already reached; aim a little ahead for smoother turns.
+                    while ((bot.route_step + 1 < bot.route.size()) &&
+                           (flat_distance(nav.nodes[size_t(bot.route[bot.route_step])].pos, view.pos) < 110.0f)) {
+                        bot.route_step++;
+                    }
+                    if (bot.route_step < bot.route.size()) {
+                        size_t ahead = bot.route_step;
+                        if ((ahead + 1 < bot.route.size()) &&
+                            (flat_distance(nav.nodes[size_t(bot.route[ahead + 1])].pos, view.pos) < 220.0f)) {
+                            ahead++;
+                        }
+                        waypoint = nav.nodes[size_t(bot.route[ahead])].pos;
+                        following = flat_distance(waypoint, view.pos) > 40.0f;
+                    }
+                }
+                else {
+                    bot.route.clear();
+                }
+                if (following) {
+                    const Vec3 to_wp = waypoint - view.pos;
+                    const float wp_err = wrap_angle(yaw_of(to_wp) - yaw_of(view.fwd));
+                    const int ts = bot.turn_sign;
+                    sx = (ts != 0) ? std::clamp(wp_err * 1.4f * float(ts), -0.75f, 0.75f) : 0.5f;
+                    if (std::fabs(wp_err) < 0.05f) sx = 0.0f;
+                    if (bot.pitch_sign != 0) {   // keep level while travelling
+                        sy = std::clamp(-pitch_of(view.fwd) * 1.5f * float(bot.pitch_sign), -0.4f, 0.4f);
+                        if (std::fabs(sy) < 0.05f) sy = 0.0f;
+                    }
+                    if (std::fabs(wp_err) < 1.0f) b |= BTN_C_UP;
+                    // Progress is judged along the route, so reset the no-progress timer.
+                    bot.hunt_best = flat;
+                    bot.hunt_best_time = now;
+                    break;
+                }
                 // Turn toward the target. Until the turn direction is known, sweep one way:
                 // track_cameras picks the sign up from the response.
                 // Proportional, gentle, with a dead zone once on target so the view settles
@@ -696,6 +930,7 @@ namespace {
                 if (!(bot.prev_buttons & BTN_Z)) bot.aimed_throws++;
             }
             track_cameras(bot, cams, camera_count);
+            if (controller != 0) nav_update(cams, camera_count, now);
         }
         else {
             for (Bot::CamTrack& c : bot.tracks) c.have_prev = false;
