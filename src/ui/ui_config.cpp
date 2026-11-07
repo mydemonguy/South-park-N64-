@@ -373,6 +373,7 @@ struct ControlOptionsContext {
     std::atomic<recomp::BackgroundInputMode> background_input_mode;
     std::atomic<goemon64::AutosaveMode> autosave_mode;
     std::atomic<goemon64::ViewDistance> view_distance;
+    std::atomic<goemon64::MultiplayerBots> multiplayer_bots{ goemon64::MultiplayerBots::Off };
     std::atomic<goemon64::AutoplayMode> autoplay_mode{ (std::getenv("SOUTHPARK_AUTOPLAY") != nullptr) ? goemon64::AutoplayMode::On : goemon64::AutoplayMode::Off };
     std::atomic<goemon64::CameraInvertMode> camera_invert_mode;
     std::atomic<goemon64::AnalogCamMode> analog_cam_mode;
@@ -483,6 +484,17 @@ void goemon64::set_view_distance(goemon64::ViewDistance distance) {
     control_options_context.view_distance = distance;
     if (general_model_handle) {
         general_model_handle.DirtyVariable("view_distance");
+    }
+}
+
+goemon64::MultiplayerBots goemon64::get_multiplayer_bots() {
+    return control_options_context.multiplayer_bots;
+}
+
+void goemon64::set_multiplayer_bots(goemon64::MultiplayerBots bots) {
+    control_options_context.multiplayer_bots = bots;
+    if (general_model_handle) {
+        general_model_handle.DirtyVariable("multiplayer_bots");
     }
 }
 
@@ -1383,6 +1395,7 @@ public:
         bind_atomic_option(constructor, "autosave_mode", &control_options_context.autosave_mode);
         bind_atomic_option(constructor, "view_distance", &control_options_context.view_distance);
         bind_atomic_option(constructor, "autoplay_mode", &control_options_context.autoplay_mode);
+        bind_atomic_option(constructor, "multiplayer_bots", &control_options_context.multiplayer_bots);
         bind_atomic_option(constructor, "camera_invert_mode", &control_options_context.camera_invert_mode);
         bind_atomic_option(constructor, "analog_cam_mode", &control_options_context.analog_cam_mode);
         bind_atomic_option(constructor, "touch_controls_mode", &control_options_context.touch_controls_mode);

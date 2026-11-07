@@ -1,3 +1,4 @@
+#include <cstdio>
 #include <array>
 #include <cmath>
 
@@ -87,9 +88,22 @@ void recomp::set_input_binding(recomp::GameInput input, size_t binding_index, re
     }
 }
 
-bool southpark_bot_input(uint16_t* buttons, float* x, float* y);  // src/game/southpark_bot.cpp
+bool southpark_bot_input(int controller, uint16_t* buttons, float* x, float* y);  // src/game/southpark_bot.cpp
 
 bool recomp::get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, float* y_out) {
+    // Controllers 2-4 exist only for multiplayer bots (src/game/southpark_bot.cpp).
+    if (controller_num != 0) {
+        float bot_x = 0.0f, bot_y = 0.0f;
+        uint16_t bot_buttons = 0;
+        if (!southpark_bot_input(controller_num, &bot_buttons, &bot_x, &bot_y)) {
+            return false;
+        }
+        *buttons_out = bot_buttons;
+        *x_out = std::clamp(bot_x, -1.0f, 1.0f);
+        *y_out = std::clamp(bot_y, -1.0f, 1.0f);
+        return true;
+    }
+
     uint16_t cur_buttons = 0;
     float cur_x = 0.0f;
     float cur_y = 0.0f;
@@ -229,10 +243,19 @@ bool recomp::get_n64_input(int controller_num, uint16_t* buttons_out, float* x_o
 
     // Autoplay test (src/game/southpark_bot.cpp) replaces the player's input while it is on,
     // except while the recomp's own menus have the controller.
+    {
+        static bool was_disabled = false;
+        const bool disabled = recomp::game_input_disabled();
+        if (disabled != was_disabled) {
+            std::fprintf(stderr, "[input] game input %s (a recomp menu %s the controller)\n",
+                disabled ? "blocked" : "restored", disabled ? "has" : "released");
+            was_disabled = disabled;
+        }
+    }
     if (!recomp::game_input_disabled()) {
         float bot_x = 0.0f, bot_y = 0.0f;
         uint16_t bot_buttons = 0;
-        if (southpark_bot_input(&bot_buttons, &bot_x, &bot_y)) {
+        if (southpark_bot_input(0, &bot_buttons, &bot_x, &bot_y)) {
             cur_buttons = bot_buttons;
             cur_x = bot_x;
             cur_y = bot_y;

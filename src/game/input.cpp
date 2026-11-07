@@ -697,13 +697,24 @@ void recomp::set_rumble(int controller_num, bool on) {
     }
 }
 
+int southpark_bot_controllers();  // src/game/southpark_bot.cpp
+
 ultramodern::input::connected_device_info_t recomp::get_connected_device_info(int controller_num) {
     switch (controller_num) {
         case 0:
+            // Controller 1 holds the Controller Pak the game saves to (southpark_os.cpp).
             return ultramodern::input::connected_device_info_t {
                 .connected_device = ultramodern::input::Device::Controller,
                 .connected_pak = ultramodern::input::Pak::RumblePak,
             };
+    }
+
+    // Controllers 2-4: present when the Multiplayer Bots setting gives them a bot.
+    if ((controller_num > 0) && (controller_num <= southpark_bot_controllers())) {
+        return ultramodern::input::connected_device_info_t {
+            .connected_device = ultramodern::input::Device::Controller,
+            .connected_pak = ultramodern::input::Pak::None,
+        };
     }
 
     return ultramodern::input::connected_device_info_t {

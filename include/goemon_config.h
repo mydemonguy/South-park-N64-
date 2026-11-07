@@ -78,6 +78,27 @@ namespace goemon64 {
     AutoplayMode get_autoplay_mode();
     void set_autoplay_mode(AutoplayMode mode);
 
+    // Multiplayer bots (src/game/southpark_bot.cpp): how many extra controllers (2, 3, 4)
+    // the game sees, each played by a bot. South Park only offers Multiplayer with more
+    // than one controller connected. Saved.
+    enum class MultiplayerBots {
+        Off,
+        One,
+        Two,
+        Three,
+        OptionCount
+    };
+
+    NLOHMANN_JSON_SERIALIZE_ENUM(goemon64::MultiplayerBots, {
+        {goemon64::MultiplayerBots::Off, "Off"},
+        {goemon64::MultiplayerBots::One, "One"},
+        {goemon64::MultiplayerBots::Two, "Two"},
+        {goemon64::MultiplayerBots::Three, "Three"}
+    });
+
+    MultiplayerBots get_multiplayer_bots();
+    void set_multiplayer_bots(MultiplayerBots bots);
+
     enum class TargetingMode {
         Switch,
         Hold,

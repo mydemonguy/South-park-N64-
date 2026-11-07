@@ -153,6 +153,56 @@
                             <label class="config-option__tab-label" for="autoplay_on">On</label>
                         </div>
                     </div>
+                    <!-- multiplayer bots -->
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(22)" id="conf-general__Multiplayer-Bots">
+                        <label class="config-option__title">Multiplayer Bots</label>
+                        <div class="config-option__list">
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(22)"
+                                name="multiplayer_bots"
+                                data-checked="multiplayer_bots"
+                                value="Off"
+                                id="mp_bots_off"
+                                style="nav-up: #autoplay_off"
+                            />
+                            <label class="config-option__tab-label" for="mp_bots_off">Off</label>
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(22)"
+                                name="multiplayer_bots"
+                                data-checked="multiplayer_bots"
+                                value="One"
+                                id="mp_bots_1"
+                                style="nav-up: #autoplay_off"
+                            />
+                            <label class="config-option__tab-label" for="mp_bots_1">1</label>
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(22)"
+                                name="multiplayer_bots"
+                                data-checked="multiplayer_bots"
+                                value="Two"
+                                id="mp_bots_2"
+                                style="nav-up: #autoplay_off"
+                            />
+                            <label class="config-option__tab-label" for="mp_bots_2">2</label>
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(22)"
+                                name="multiplayer_bots"
+                                data-checked="multiplayer_bots"
+                                value="Three"
+                                id="mp_bots_3"
+                                style="nav-up: #autoplay_off"
+                            />
+                            <label class="config-option__tab-label" for="mp_bots_3">3</label>
+                        </div>
+                    </div>
                 </div>
                 <!-- Descriptions -->
                 <div class="config__wrapper">
@@ -170,6 +220,12 @@
                     </p>
                     <p data-if="cur_config_index == 21">
                         A test bot takes over the controller: it walks, turns, throws and jumps, and presses A and Start when nothing moves, to get through menus and cutscenes. It logs where it went, so a session log shows whether the game kept running. Turn it off here to play again. Always off when the game starts.
+                    </p>
+                    <p data-if="cur_config_index == 22">
+                        Adds computer players to Multiplayer. The game only offers Multiplayer when more than one controller is connected; each bot is an extra controller (players 2, 3 and 4) played by the app: it hunts the nearest other player, aims and throws.
+                        <br/>
+                        <br/>
+                        <b>Set this before choosing Multiplayer</b> (restart the game if Multiplayer was already greyed out). The bots leave the menus to you (set PLAYERS to include them) and start playing as soon as the split-screen match begins.
                     </p>
                     <p data-if="cur_config_index == 5">
                         Allows the game to read controller input when out of focus.
