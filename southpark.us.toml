@@ -154,7 +154,7 @@ text = "southpark_sched_trace(rdram, ctx);"
 [[patches.hook]]
 func = "func_0025B68C"
 before_vram = 0x0025BFAC
-text = "ctx->f1.fl *= southpark_view_distance_scale();"
+text = "ctx->f1.fl *= southpark_view_distance_scale(); southpark_bot_camera(rdram, ctx->r19);"
 
 # The radius of the box of level blocks gathered around the camera (+0x348..+0x354).
 [[patches.hook]]

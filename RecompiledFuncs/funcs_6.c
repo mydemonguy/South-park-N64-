@@ -53046,7 +53046,7 @@ L_0025BEE8:
     ctx->f0.fl = ctx->f25.fl - ctx->f0.fl;
     // 0x0025BFA8: addiu       $a1, $s3, 0x54
     ctx->r5 = ADD32(ctx->r19, 0X54);
-    ctx->f1.fl *= southpark_view_distance_scale();
+    ctx->f1.fl *= southpark_view_distance_scale(); southpark_bot_camera(rdram, ctx->r19);
     // 0x0025BFAC: swc1        $f1, 0x14($sp)
     MEM_W(0X14, ctx->r29) = ctx->f_odd[(1 - 1) * 2];
     // 0x0025BFB0: jal         0x0029A3E4

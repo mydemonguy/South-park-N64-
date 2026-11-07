@@ -125,6 +125,34 @@
                             <label class="config-option__tab-label" for="view_distance_max">Max</label>
                         </div>
                     </div>
+                    <!-- autoplay test -->
+                    <div class="config-option" data-event-mouseover="set_cur_config_index(21)" id="conf-general__Autoplay">
+                        <label class="config-option__title">Autoplay Test</label>
+                        <div class="config-option__list">
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(21)"
+                                name="autoplay_mode"
+                                data-checked="autoplay_mode"
+                                value="Off"
+                                id="autoplay_off"
+                                style="nav-up: #view_distance_original"
+                            />
+                            <label class="config-option__tab-label" for="autoplay_off">Off</label>
+                            <input
+                                type="radio"
+                                data-event-blur="set_cur_config_index(-1)"
+                                data-event-focus="set_cur_config_index(21)"
+                                name="autoplay_mode"
+                                data-checked="autoplay_mode"
+                                value="On"
+                                id="autoplay_on"
+                                style="nav-up: #view_distance_original"
+                            />
+                            <label class="config-option__tab-label" for="autoplay_on">On</label>
+                        </div>
+                    </div>
                 </div>
                 <!-- Descriptions -->
                 <div class="config__wrapper">
@@ -139,6 +167,9 @@
                         <br/>
                         <br/>
                         Scenery, characters and objects are kept out to the new distance too, instead of popping in or fading out where they used to. Some areas may still end in a visible edge where the level itself stops. Drawing further costs some speed.
+                    </p>
+                    <p data-if="cur_config_index == 21">
+                        A test bot takes over the controller: it walks, turns, throws and jumps, and presses A and Start when nothing moves, to get through menus and cutscenes. It logs where it went, so a session log shows whether the game kept running. Turn it off here to play again. Always off when the game starts.
                     </p>
                     <p data-if="cur_config_index == 5">
                         Allows the game to read controller input when out of focus.

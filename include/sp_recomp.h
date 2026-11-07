@@ -71,6 +71,13 @@ extern "C"
 #endif
 float southpark_widescreen_scale(void);
 
+// Autoplay test (src/game/southpark_bot.cpp): the hook in the camera update (func_0025B68C,
+// $s3 = the camera) reports the camera each frame.
+#ifdef __cplusplus
+extern "C"
+#endif
+void southpark_bot_camera(uint8_t* rdram, uint64_t camera);
+
 static inline float sp_widen_half_angle(float half_angle) {
     const float scale = southpark_widescreen_scale();
     return (scale > 1.0f) ? atanf(tanf(half_angle) * scale) : half_angle;

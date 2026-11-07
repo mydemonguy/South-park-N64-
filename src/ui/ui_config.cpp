@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <cstdio>
 #include <algorithm>
 #include <cmath>
@@ -372,6 +373,7 @@ struct ControlOptionsContext {
     std::atomic<recomp::BackgroundInputMode> background_input_mode;
     std::atomic<goemon64::AutosaveMode> autosave_mode;
     std::atomic<goemon64::ViewDistance> view_distance;
+    std::atomic<goemon64::AutoplayMode> autoplay_mode{ (std::getenv("SOUTHPARK_AUTOPLAY") != nullptr) ? goemon64::AutoplayMode::On : goemon64::AutoplayMode::Off };
     std::atomic<goemon64::CameraInvertMode> camera_invert_mode;
     std::atomic<goemon64::AnalogCamMode> analog_cam_mode;
     std::atomic<goemon64::TouchControlsMode> touch_controls_mode;
@@ -481,6 +483,17 @@ void goemon64::set_view_distance(goemon64::ViewDistance distance) {
     control_options_context.view_distance = distance;
     if (general_model_handle) {
         general_model_handle.DirtyVariable("view_distance");
+    }
+}
+
+goemon64::AutoplayMode goemon64::get_autoplay_mode() {
+    return control_options_context.autoplay_mode;
+}
+
+void goemon64::set_autoplay_mode(goemon64::AutoplayMode mode) {
+    control_options_context.autoplay_mode = mode;
+    if (general_model_handle) {
+        general_model_handle.DirtyVariable("autoplay_mode");
     }
 }
 
@@ -1369,6 +1382,7 @@ public:
         bind_atomic_option(constructor, "background_input_mode", &control_options_context.background_input_mode);
         bind_atomic_option(constructor, "autosave_mode", &control_options_context.autosave_mode);
         bind_atomic_option(constructor, "view_distance", &control_options_context.view_distance);
+        bind_atomic_option(constructor, "autoplay_mode", &control_options_context.autoplay_mode);
         bind_atomic_option(constructor, "camera_invert_mode", &control_options_context.camera_invert_mode);
         bind_atomic_option(constructor, "analog_cam_mode", &control_options_context.analog_cam_mode);
         bind_atomic_option(constructor, "touch_controls_mode", &control_options_context.touch_controls_mode);

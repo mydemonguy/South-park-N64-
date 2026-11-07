@@ -87,6 +87,8 @@ void recomp::set_input_binding(recomp::GameInput input, size_t binding_index, re
     }
 }
 
+bool southpark_bot_input(uint16_t* buttons, float* x, float* y);  // src/game/southpark_bot.cpp
+
 bool recomp::get_n64_input(int controller_num, uint16_t* buttons_out, float* x_out, float* y_out) {
     uint16_t cur_buttons = 0;
     float cur_x = 0.0f;
@@ -223,6 +225,18 @@ bool recomp::get_n64_input(int controller_num, uint16_t* buttons_out, float* x_o
         constexpr size_t r_index =
             (size_t)GameInput::R - (size_t)GameInput::N64_BUTTON_START;
         cur_buttons = (uint16_t)(cur_buttons & ~n64_button_values[r_index]);
+    }
+
+    // Autoplay test (src/game/southpark_bot.cpp) replaces the player's input while it is on,
+    // except while the recomp's own menus have the controller.
+    if (!recomp::game_input_disabled()) {
+        float bot_x = 0.0f, bot_y = 0.0f;
+        uint16_t bot_buttons = 0;
+        if (southpark_bot_input(&bot_buttons, &bot_x, &bot_y)) {
+            cur_buttons = bot_buttons;
+            cur_x = bot_x;
+            cur_y = bot_y;
+        }
     }
 
     *buttons_out = cur_buttons;

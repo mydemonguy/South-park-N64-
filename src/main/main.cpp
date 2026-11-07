@@ -1,4 +1,11 @@
 #include <cstdio>
+#include <cstdlib>
+#if defined(__linux__) && !defined(__ANDROID__)
+#include <csignal>
+#include <execinfo.h>
+#include <signal.h>
+#include <unistd.h>
+#endif
 #include <cassert>
 #include <unordered_map>
 #include <vector>
@@ -733,7 +740,44 @@ int game_main(int argc, char** argv) {
     // any emulation threads spin up so a background/resume fault is captured.
     goemon64::diag::install_crash_handler();
 #else
+#if defined(__linux__)
+// Linux desktop: the game's demand paging (src/game/southpark_os.cpp) arrives as SIGSEGV
+// and must be serviced, exactly as android_diag.cpp's handler does on Android; without
+// this the first page of a streamed region kills the game. Any other fault prints a
+// backtrace and is re-raised with the default action.
+extern "C" bool southpark_tlb_handle_fault(uintptr_t host_addr);
+
+static void linux_fault_handler(int sig, siginfo_t* info, void*) {
+    const uintptr_t fault = reinterpret_cast<uintptr_t>(info ? info->si_addr : nullptr);
+    if (southpark_tlb_handle_fault(fault)) {
+        return; // page mapped; the faulting instruction retries
+    }
+    char msg[96];
+    const int len = std::snprintf(msg, sizeof(msg), "[crash] signal %d at address %p\n", sig, reinterpret_cast<void*>(fault));
+    if (len > 0) {
+        (void)!write(STDERR_FILENO, msg, size_t(len));
+    }
+    void* frames[48];
+    const int count = backtrace(frames, 48);
+    backtrace_symbols_fd(frames, count, STDERR_FILENO);
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+static void install_linux_fault_handler() {
+    struct sigaction action{};
+    action.sa_sigaction = linux_fault_handler;
+    action.sa_flags = SA_SIGINFO | SA_NODEFER;
+    sigemptyset(&action.sa_mask);
+    sigaction(SIGSEGV, &action, nullptr);
+    sigaction(SIGBUS, &action, nullptr);
+}
+#endif
+
 int main(int argc, char** argv) {
+#if defined(__linux__)
+    install_linux_fault_handler();
+#endif
 #endif
     (void)argc;
     (void)argv;
@@ -837,6 +881,19 @@ int main(int argc, char** argv) {
             __android_log_print(ANDROID_LOG_ERROR, "Goemon64",
                 "ROM not found at %s (launcher should have copied it)", android_rom.c_str());
         }
+    }
+#else
+    // Unattended desktop test runs (no file picker, no clicking): SOUTHPARK_ROM names the
+    // ROM to use, and SOUTHPARK_AUTOSTART starts the game straight away instead of showing
+    // the launcher. SOUTHPARK_AUTOPLAY (ui_config.cpp) then lets the test bot play.
+    if (const char* rom = std::getenv("SOUTHPARK_ROM")) {
+        recomp::RomValidationError err = recomp::select_rom(std::filesystem::path{ rom }, supported_games[0].game_id);
+        std::fprintf(stderr, "[test] SOUTHPARK_ROM %s -> %s\n", rom, err == recomp::RomValidationError::Good ? "ok" : "rejected");
+    }
+    recomp::check_all_stored_roms();
+    if ((std::getenv("SOUTHPARK_AUTOSTART") != nullptr) && recomp::is_rom_valid(supported_games[0].game_id)) {
+        std::fprintf(stderr, "[test] SOUTHPARK_AUTOSTART: starting the game without the launcher\n");
+        recomp::start_game(supported_games[0].game_id);
     }
 #endif
 

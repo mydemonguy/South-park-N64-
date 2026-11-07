@@ -61,6 +61,23 @@ namespace goemon64 {
     // The far-plane multiplier for a setting: 1, 1.5, 2 or 3.
     float view_distance_scale(ViewDistance distance);
 
+    // Autoplay test (src/game/southpark_bot.cpp): a bot plays controller 1. Not saved --
+    // always Off at launch -- except that a desktop build starts with it On when the
+    // environment variable SOUTHPARK_AUTOPLAY is set, for unattended test runs.
+    enum class AutoplayMode {
+        Off,
+        On,
+        OptionCount
+    };
+
+    NLOHMANN_JSON_SERIALIZE_ENUM(goemon64::AutoplayMode, {
+        {goemon64::AutoplayMode::Off, "Off"},
+        {goemon64::AutoplayMode::On, "On"}
+    });
+
+    AutoplayMode get_autoplay_mode();
+    void set_autoplay_mode(AutoplayMode mode);
+
     enum class TargetingMode {
         Switch,
         Hold,
