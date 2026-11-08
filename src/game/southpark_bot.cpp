@@ -246,6 +246,12 @@ namespace {
         int recent_count = 0;
         float forward_share = 0.0f;   // running share of polls with forward held
         bool blocked = false;
+        // Pitched far up or down, since when: a wrongly learned tilt direction pins the view
+        // at the floor or sky, where it cannot learn better.
+        Clock::time_point pitch_extreme_since{};
+        bool pitch_extreme = false;
+        uint32_t pitch_flips = 0;
+        uint32_t respawn_presses = 0;
         // Route points that led into a wall, avoided for a while.
         std::vector<std::pair<int, Clock::time_point>> avoid;
         Clock::time_point target_since{};
@@ -561,11 +567,20 @@ namespace {
             else if (a > second_abs) { second_abs = a; }
         }
         bot.tracked_polls++;
+        // A camera it already has and that is still live is kept unless another follows the
+        // stick far more clearly (its own may just be still, e.g. while respawning).
+        double own_abs = -1.0;
+        for (const Bot::CamTrack& c : bot.tracks) {
+            if ((bot.own_cam != 0) && (c.addr == bot.own_cam)) own_abs = std::fabs(c.yaw_corr);
+        }
+        if ((best != nullptr) && (own_abs >= 0.0) && (best->addr != bot.own_cam) && (best_abs < 3.0 * own_abs + 1.0)) {
+            best = nullptr;
+        }
         if ((best != nullptr) && (bot.tracked_polls > 90) && (best_abs > 0.5) && (best_abs > 3.0 * second_abs)) {
             // A camera another bot already holds goes to whichever follows it more clearly.
             for (Bot& other : bots) {
                 if ((&other == &bot) || !other.active || (other.own_cam != best->addr)) continue;
-                if (best_abs < 1.5 * other.own_corr) {
+                if (best_abs < 3.0 * other.own_corr) {
                     return;
                 }
                 std::fprintf(stderr, "[bot %d] camera %08X follows bot %d more closely\n",
@@ -1004,6 +1019,31 @@ namespace {
 
         if (bot.playing) {
             bot.forward_share = bot.forward_share * 0.97f + ((b & BTN_C_UP) ? 0.03f : 0.0f);
+
+            // Trying to walk but the view not moving at all for 4 s: probably knocked out and
+            // waiting to respawn, which can take a button. Press fire, and A now and then.
+            if ((controller != 0) && (seconds(bot.last_moved, now) > 4.0) && (bot.forward_share > 0.5f)) {
+                const double t = std::fmod(t_total, 2.0);
+                if (t < 0.12) b |= BTN_Z;
+                else if ((t > 1.0) && (t < 1.12)) b |= BTN_A;
+                if ((b & (BTN_Z | BTN_A)) && !(bot.prev_buttons & (BTN_Z | BTN_A))) bot.respawn_presses++;
+            }
+
+            // Looking hard at the floor or sky for 2 s: the tilt direction it learned is
+            // probably backwards. Flip it (if that is wrong, it flips back 2 s later).
+            if (have_view && (bot.pitch_sign != 0)) {
+                const bool extreme = std::fabs(pitch_of(view.fwd)) > 0.7f;
+                if (extreme && !bot.pitch_extreme) bot.pitch_extreme_since = now;
+                bot.pitch_extreme = extreme;
+                if (extreme && (seconds(bot.pitch_extreme_since, now) > 2.0)) {
+                    bot.pitch_sign = -bot.pitch_sign;
+                    bot.pitch_flips++;
+                    bot.pitch_extreme_since = now;
+                    for (Bot::CamTrack& c : bot.tracks) if (c.addr == bot.own_cam) c.pitch_corr = 0.0;
+                    std::fprintf(stderr, "[bot %d] view stuck looking %s: flipping tilt direction\n", controller + 1,
+                        (pitch_of(view.fwd) > 0) ? "up" : "down");
+                }
+            }
         }
 
         // Count presses (new this poll), not polls.
@@ -1041,9 +1081,9 @@ void southpark_bot_summary() {
         shown++;
         std::fprintf(stderr,
             "[match] bot %d this session: %u matches, %.0fs playing (%.0fs near you), walked %.0f, throws %u (%u lined up), respawns/area changes %u, "
-            "stuck %u, detours %u, routes followed %u, target changes %u, own view %s, now %s\n",
+            "stuck %u, detours %u, routes followed %u, target changes %u, tilt flips %u, respawn presses %u, own view %s, now %s\n",
             bot.controller + 1, bot.play_entries, bot.play_seconds, bot.near_human_seconds, bot.distance_total, bot.fires, bot.aimed_throws, bot.area_changes,
-            bot.stuck_count, bot.detours, bot.routes_found, bot.target_changes, (bot.own_cam != 0) ? "found" : "not found",
+            bot.stuck_count, bot.detours, bot.routes_found, bot.target_changes, bot.pitch_flips, bot.respawn_presses, (bot.own_cam != 0) ? "found" : "not found",
             bot.playing ? "in a match" : "waiting");
     }
     if (shown == 0) {
