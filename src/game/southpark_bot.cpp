@@ -61,6 +61,8 @@ namespace {
 
     struct Vec3 { float x, y, z; };
     Vec3 operator-(const Vec3& a, const Vec3& b) { return { a.x - b.x, a.y - b.y, a.z - b.z }; }
+    inline Vec3 operator+(const Vec3& a, const Vec3& b) { return { a.x + b.x, a.y + b.y, a.z + b.z }; }
+    inline Vec3 operator*(const Vec3& a, float k) { return { a.x * k, a.y * k, a.z * k }; }
     float length(const Vec3& v) { return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z); }
     float distance(const Vec3& a, const Vec3& b) { return length(a - b); }
     float wrap_angle(float a) {
@@ -255,6 +257,17 @@ namespace {
         Clock::time_point route_time{};
         uint32_t routes_found = 0;
         uint32_t target_cam = 0;
+        // The target's movement, for leading throws.
+        uint32_t vel_cam = 0;
+        Vec3 vel_last_pos{};
+        Clock::time_point vel_last_time{};
+        Vec3 target_vel{};
+        // Strafing: which way, and when to change.
+        Clock::time_point strafe_change{};
+        bool strafing = false;
+        uint32_t dodges = 0;
+        Clock::time_point down_since{};   // its view has been the knocked-out view since
+        uint32_t knockouts = 0;
         // Blocked: walking forward most of the last 4 s but no more than 60 units from where
         // it was. (Sliding along a wall still counts as moving to the half-second check.)
         std::array<Vec3, 8> recent{};
@@ -516,10 +529,10 @@ namespace {
         if (own_view(bot, view, cams, count)) {
             std::fprintf(stderr,
                 "[bot %d] %.0fs %s, at (%.0f, %.0f, %.0f), moved %.0f since last line, %.0f total; players seen %d, "
-                "times in play %u, hunts %u, stuck %u, menu presses %u, area changes %u, throws %u (%u lined up), jumps %u, detours %u, routes %u (map %zu points), target changes %u, near you %.0fs, view turned %.0f deg/s\n",
+                "times in play %u, hunts %u, stuck %u, menu presses %u, area changes %u, throws %u (%u lined up), jumps %u, detours %u, routes %u (map %zu points), target changes %u, dodges %u, near you %.0fs, view turned %.0f deg/s\n",
                 bot.controller + 1, t, action_name(bot.action), double(view.pos.x), double(view.pos.y), double(view.pos.z),
                 bot.have_pos ? double(distance(view.pos, bot.report_pos)) : 0.0, bot.distance_total, count,
-                bot.play_entries, bot.hunts, bot.stuck_count, bot.menu_presses, bot.area_changes, bot.fires, bot.aimed_throws, bot.jumps, bot.detours, bot.routes_found, nav.nodes.size(), bot.target_changes, bot.near_human_seconds,
+                bot.play_entries, bot.hunts, bot.stuck_count, bot.menu_presses, bot.area_changes, bot.fires, bot.aimed_throws, bot.jumps, bot.detours, bot.routes_found, nav.nodes.size(), bot.target_changes, bot.dodges, bot.near_human_seconds,
                 bot.yaw_travel * 57.2958 / std::max(1.0, seconds(bot.last_report, now)));
             bot.yaw_travel = 0.0;
             bot.report_pos = view.pos;
@@ -623,6 +636,30 @@ namespace {
         }
     }
 
+    // A knocked-out player's view drops to look down at them while the game waits for
+    // Continue; that turns the far plane on its side, so its shape reads below 1.
+    bool knocked_out(const View& v) {
+        return v.aspect < 1.0f;
+    }
+
+    // Each bot fights a little differently, so a match does not feel like three copies.
+    struct Style {
+        const char* name;
+        float range_lo, range_hi;   // preferred fighting distance
+        float aim_tolerance;        // how lined up before throwing (radians)
+        float lead;                 // how much to aim ahead of a moving target
+        float strafe_share;         // share of the time spent circle-strafing in a fight
+        float dodge;                // how readily it dodges when someone aims at it
+    };
+    const Style& style_for(int controller) {
+        static const Style styles[3] = {
+            { "brawler",      140.0f, 330.0f, 0.08f, 0.8f, 0.5f, 0.6f },   // player 2: gets in close
+            { "sharpshooter", 380.0f, 620.0f, 0.05f, 1.0f, 0.4f, 0.8f },   // player 3: keeps its distance
+            { "dodger",       220.0f, 450.0f, 0.07f, 0.9f, 0.8f, 1.0f },   // player 4: hard to pin down
+        };
+        return styles[std::clamp(controller - 1, 0, 2)];
+    }
+
     // The person playing: player 1, whose view is the first one the game allocates (the
     // lowest address) and which no bot has claimed as its own.
     uint32_t human_camera(const std::array<uint32_t, MaxPlayers>& cams, int count) {
@@ -647,6 +684,7 @@ namespace {
             if ((bot.own_cam != 0) ? (cams[i] == bot.own_cam) : (i == bot.controller)) continue;
             View other{};
             if (!read_view(cams[i], other)) continue;
+            if (knocked_out(other)) continue;   // nothing to gain from pelting a player who is down
             const Vec3 to = other.pos - self.pos;
             float cost = std::sqrt(to.x * to.x + to.z * to.z) + 2.0f * std::fabs(to.y);
             if (cost < 1.0f) continue;
@@ -953,23 +991,59 @@ namespace {
                     bot.hunt_best_time = now;
                     break;
                 }
-                // Turn toward the target. Until the turn direction is known, sweep one way:
-                // track_cameras picks the sign up from the response.
-                // Proportional, gentle, with a dead zone once on target so the view settles
-                // instead of hunting back and forth.
+                const Style& st = style_for(controller);
+
+                // Where the target is going: its speed over the last few polls, smoothed.
+                if (bot.vel_cam != bot.target_cam) {
+                    bot.vel_cam = bot.target_cam;
+                    bot.target_vel = {};
+                    bot.vel_last_time = Clock::time_point{};
+                }
+                const double vdt = seconds(bot.vel_last_time, now);
+                if ((bot.vel_last_time != Clock::time_point{}) && (vdt > 0.03) && (vdt < 0.5)) {
+                    const Vec3 v = (target - bot.vel_last_pos) * float(1.0 / vdt);
+                    if (length(v) < 1500.0f) {   // a respawn is not a speed
+                        bot.target_vel = bot.target_vel * 0.8f + v * 0.2f;
+                    }
+                }
+                if ((bot.vel_last_time == Clock::time_point{}) || (vdt > 0.03)) {
+                    bot.vel_last_pos = target;
+                    bot.vel_last_time = now;
+                }
+                // Aim where they will be when the snowball gets there.
+                const float flight = std::min(range / 1200.0f, 0.6f) * st.lead;
+                const Vec3 aim_at = target + Vec3{ bot.target_vel.x * flight, 0.0f, bot.target_vel.z * flight };
+                const Vec3 to_aim = aim_at - view.pos;
+                const float aim_yaw_err = wrap_angle(yaw_of(to_aim) - yaw_of(view.fwd));
+                const float aim_pitch_err = pitch_of(to_aim) - pitch_of(view.fwd);
+
+                // Turn toward the aim point. Until the turn direction is known, sweep one way:
+                // track_cameras picks the sign up from the response. Proportional, gentle,
+                // with a dead zone once on target so the view settles.
                 const int ts = bot.turn_sign;
-                sx = (ts != 0) ? std::clamp(yaw_err * 1.4f * float(ts), -0.75f, 0.75f) : 0.5f;
-                if (std::fabs(yaw_err) < 0.04f) sx = 0.0f;
+                sx = (ts != 0) ? std::clamp(aim_yaw_err * 1.4f * float(ts), -0.75f, 0.75f) : 0.5f;
+                if (std::fabs(aim_yaw_err) < 0.035f) sx = 0.0f;
                 if (flat < 150.0f) sx = 0.0f;   // nearly overhead: the direction is meaningless
                 const int ps = bot.pitch_sign;
-                if ((ps != 0) && (std::fabs(yaw_err) < 0.4f)) {
-                    sy = std::clamp(pitch_err * 1.2f * float(ps), -0.4f, 0.4f);
-                    if (std::fabs(pitch_err) < 0.05f) sy = 0.0f;
+                if ((ps != 0) && (std::fabs(aim_yaw_err) < 0.4f)) {
+                    sy = std::clamp(aim_pitch_err * 1.2f * float(ps), -0.4f, 0.4f);
+                    if (std::fabs(aim_pitch_err) < 0.05f) sy = 0.0f;
                 }
                 // Throw only when lined up and close: further off there is usually a wall or
                 // a building in the way, and the bot cannot see those.
-                aimed = (ts != 0) && (std::fabs(yaw_err) < 0.07f) && (range < 700.0f) &&
-                    ((ps == 0) || (std::fabs(pitch_err) < 0.15f));
+                aimed = (ts != 0) && (std::fabs(aim_yaw_err) < st.aim_tolerance) && (range < 750.0f) &&
+                    ((ps == 0) || (std::fabs(aim_pitch_err) < 0.15f));
+
+                // Is the target lined up on this bot? Then dodge.
+                bool threatened = false;
+                {
+                    View tv{};
+                    if (read_view(bot.target_cam, tv)) {
+                        const Vec3 back = view.pos - tv.pos;
+                        const float their_err = std::fabs(wrap_angle(yaw_of(back) - yaw_of(tv.fwd)));
+                        threatened = (their_err < 0.2f) && (range < 1000.0f) && !other_level;
+                    }
+                }
                 // No closer in 6 s while still far off: something is in the way. Roam for a
                 // few seconds to find another way round.
                 if (flat < bot.hunt_best - 80.0f) {
@@ -982,18 +1056,34 @@ namespace {
                     bot.turn_dir = (rng() & 1) ? 1.0f : -1.0f;
                     begin(bot, Action::Turn, 0.6 + 0.6 * rng_unit(), now);
                 }
-                // Close in across the ground; keep a distance from someone on another level
-                // rather than walking underneath them.
-                const float near_limit = other_level ? 600.0f : 120.0f;
-                const float far_limit = other_level ? 900.0f : 350.0f;
+                // Keep to its preferred fighting distance; keep further off from someone on
+                // another level rather than walking underneath them.
+                const float near_limit = other_level ? 600.0f : st.range_lo;
+                const float far_limit = other_level ? 900.0f : st.range_hi;
                 if ((flat > far_limit) && (std::fabs(yaw_err) < 1.2f)) {
                     b |= BTN_C_UP;
                 }
                 else if (flat < near_limit) {
                     b |= BTN_C_DOWN;
                 }
-                if (!other_level && (range < 900.0f) && (std::fmod(t_total + controller * 0.9, 3.2) < 0.9)) {
-                    b |= (bot.strafe_dir > 0) ? BTN_C_RIGHT : BTN_C_LEFT;   // dodge while fighting
+                // In a fight: circle-strafe, changing direction at uneven times; when the target
+                // is lined up on it, sidestep sooner and more often, with the odd jump.
+                if (!other_level && (range < 900.0f)) {
+                    if (now >= bot.strafe_change) {
+                        const bool dodge = threatened && (rng_unit() < st.dodge);
+                        if (dodge) bot.dodges++;
+                        bot.strafe_dir = (rng() & 1) ? 1.0f : -1.0f;
+                        bot.strafing = dodge || (rng_unit() < st.strafe_share);
+                        const double hold = dodge ? (0.35 + 0.5 * rng_unit()) : (1.0 + 1.8 * rng_unit());
+                        bot.strafe_change = now + std::chrono::milliseconds(int(hold * 1000.0));
+                        if (dodge && (rng_unit() < 0.25)) b |= BTN_R;   // hop
+                    }
+                    if (threatened && !bot.strafing && (rng_unit() < 0.02f * st.dodge)) {
+                        bot.strafe_change = now;   // react to being aimed at
+                    }
+                    if (bot.strafing) {
+                        b |= (bot.strafe_dir > 0) ? BTN_C_RIGHT : BTN_C_LEFT;
+                    }
                 }
             }
             else {
@@ -1027,16 +1117,41 @@ namespace {
             break;
         }
 
+        // Knocked out: the game shows the scores with Continue selected. Press A (only A)
+        // once a second until it respawns.
+        bool down = false;
+        if (bot.playing && (controller != 0) && have_view && knocked_out(view)) {
+            if (bot.down_since == Clock::time_point{}) {
+                bot.down_since = now;
+                bot.knockouts++;
+                std::fprintf(stderr, "[bot %d] %.0fs knocked out: pressing A to continue\n", controller + 1, seconds(bot.start, now));
+            }
+            down = true;
+            b = 0;
+            sx = sy = 0.0f;
+            if ((seconds(bot.down_since, now) > 1.5) && (std::fmod(seconds(bot.down_since, now), 1.0) < 0.12)) {
+                b = BTN_A;
+                if (!(bot.prev_buttons & BTN_A)) bot.respawn_presses++;
+            }
+        }
+        else {
+            if ((bot.down_since != Clock::time_point{}) && bot.playing) {
+                std::fprintf(stderr, "[bot %d] back in after %.1fs\n", controller + 1, seconds(bot.down_since, now));
+            }
+            bot.down_since = Clock::time_point{};
+        }
+
         // Ease the stick toward what was asked for, like a thumb would, so the view turns
         // smoothly instead of snapping.
         sx = bot.prev_sx + (sx - bot.prev_sx) * 0.35f;
         sy = bot.prev_sy + (sy - bot.prev_sy) * 0.35f;
         if (std::fabs(sx) < 0.02f) sx = 0.0f;
         if (std::fabs(sy) < 0.02f) sy = 0.0f;
+        if (down) sx = sy = 0.0f;   // hands off the stick on the Continue screen
 
         if (bot.playing) {
             // Throw only at a target it is lined up on, about once every 0.7 s.
-            if (aimed && (std::fmod(t_total + controller * 0.3, 0.7) < 0.12)) {
+            if (aimed && !down && (std::fmod(t_total + controller * 0.3, 0.7) < 0.12)) {
                 b |= BTN_Z;
                 if (!(bot.prev_buttons & BTN_Z)) bot.aimed_throws++;
             }
@@ -1049,7 +1164,7 @@ namespace {
         bot.prev_sx = sx;
         bot.prev_sy = sy;
 
-        if (bot.playing) {
+        if (bot.playing && !down) {
             bot.forward_share = bot.forward_share * 0.97f + ((b & BTN_C_UP) ? 0.03f : 0.0f);
 
             // Trying to walk but the view not moving at all for 4 s: probably knocked out and
@@ -1113,9 +1228,9 @@ void southpark_bot_summary() {
         shown++;
         std::fprintf(stderr,
             "[match] bot %d this session: %u matches, %.0fs playing (%.0fs near you), walked %.0f, throws %u (%u lined up), respawns/area changes %u, "
-            "stuck %u, detours %u, routes followed %u, target changes %u, tilt flips %u, respawn presses %u, own view %s, now %s\n",
+            "stuck %u, detours %u, routes followed %u, target changes %u, tilt flips %u, knocked out %u, respawn presses %u, own view %s, now %s\n",
             bot.controller + 1, bot.play_entries, bot.play_seconds, bot.near_human_seconds, bot.distance_total, bot.fires, bot.aimed_throws, bot.area_changes,
-            bot.stuck_count, bot.detours, bot.routes_found, bot.target_changes, bot.pitch_flips, bot.respawn_presses, (bot.own_cam != 0) ? "found" : "not found",
+            bot.stuck_count, bot.detours, bot.routes_found, bot.target_changes, bot.pitch_flips, bot.knockouts, bot.respawn_presses, (bot.own_cam != 0) ? "found" : "not found",
             bot.playing ? "in a match" : "waiting");
     }
     if (shown == 0) {
@@ -1161,7 +1276,9 @@ int southpark_bot_controllers() {
 // Desktop test runs: when SOUTHPARK_TEST_INPUT names a file, controller 1 holds whatever
 // that file lists (button names A B Z L R START CU CD CL CR DU DD DL DR, and X=<f> Y=<f> for
 // the stick), so a script can drive the menus. An empty or missing file is no input.
-static bool test_input(uint16_t* buttons, float* x, float* y) {
+// Tokens apply to controller 1; prefixed "P2:" .. "P4:" they drive that controller instead
+// of its bot (for testing what another controller's input does).
+static bool test_input(int controller, uint16_t* buttons, float* x, float* y) {
     static const char* path = std::getenv("SOUTHPARK_TEST_INPUT");
     if (path == nullptr) {
         return false;
@@ -1170,7 +1287,15 @@ static bool test_input(uint16_t* buttons, float* x, float* y) {
     std::string token;
     uint16_t b = 0;
     float sx = 0.0f, sy = 0.0f;
+    bool any = (controller == 0);
     while (in >> token) {
+        int target = 0;
+        if ((token.size() > 3) && (token[0] == 'P') && (token[2] == ':') && (token[1] >= '2') && (token[1] <= '4')) {
+            target = token[1] - '1';
+            token = token.substr(3);
+        }
+        if (target != controller) continue;
+        any = true;
         static const std::pair<const char*, uint16_t> names[] = {
             { "A", 0x8000 }, { "B", 0x4000 }, { "Z", 0x2000 }, { "START", 0x1000 },
             { "DU", 0x0800 }, { "DD", 0x0400 }, { "DL", 0x0200 }, { "DR", 0x0100 },
@@ -1186,6 +1311,9 @@ static bool test_input(uint16_t* buttons, float* x, float* y) {
             goemon64::set_multiplayer_bots((n >= 3) ? goemon64::MultiplayerBots::Three : (n == 2) ? goemon64::MultiplayerBots::Two :
                 (n == 1) ? goemon64::MultiplayerBots::One : goemon64::MultiplayerBots::Off);
         }
+    }
+    if (!any) {
+        return false;
     }
     *buttons = b;
     *x = sx;
@@ -1203,7 +1331,10 @@ bool southpark_bot_input(int controller, uint16_t* buttons, float* x, float* y) 
         return false;
     }
 #if !defined(__ANDROID__)
-    if ((controller == 0) && (goemon64::get_autoplay_mode() != goemon64::AutoplayMode::On) && test_input(buttons, x, y)) {
+    if ((controller == 0) && (goemon64::get_autoplay_mode() != goemon64::AutoplayMode::On) && test_input(0, buttons, x, y)) {
+        return true;
+    }
+    if ((controller != 0) && test_input(controller, buttons, x, y)) {
         return true;
     }
 #endif
