@@ -819,7 +819,9 @@ namespace {
                     begin(bot, Action::Probe, 1.5, now);
                 }
             }
-            else if (((idle > 3.0) || bot.blocked) && (bot.action != Action::Unstick)) {
+            // Not moving counts as stuck only while trying to walk: a bot standing its ground
+            // in a fight is not stuck (it used to back off and hop every 3 s mid-fight).
+            else if ((((idle > 3.0) && (bot.forward_share > 0.5f)) || bot.blocked) && (bot.action != Action::Unstick)) {
                 // A route point that walked it into a wall is skipped for 20 s.
                 if (bot.blocked && (bot.route_step < bot.route.size())) {
                     bot.avoid.push_back({ bot.route[bot.route_step], now + std::chrono::seconds(20) });
