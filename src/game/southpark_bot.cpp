@@ -109,6 +109,13 @@ namespace {
         if (!read_floats(camera_rdram.load(std::memory_order_relaxed), camera + 0x26C, f, 15)) {
             return false;
         }
+        // A camera being torn down (end of a match) can still be reported with garbage in
+        // it: reject anything that is not a sensible position.
+        for (float v : f) {
+            if (!std::isfinite(v) || (std::fabs(v) > 500000.0f)) {
+                return false;
+            }
+        }
         view.pos = { f[0], f[1], f[2] };
         Vec3 mid{ 0, 0, 0 };
         for (int c = 1; c <= 4; c++) {
@@ -150,6 +157,13 @@ namespace {
             }
             if (n > 0) break;
         }
+        // Only cameras with a sensible view.
+        int valid = 0;
+        for (int i = 0; i < n; i++) {
+            View v{};
+            if (read_view(found[i], v)) found[valid++] = found[i];
+        }
+        n = valid;
         std::sort(found.begin(), found.begin() + n);
         n = std::min(n, MaxPlayers);
         for (int i = 0; i < n; i++) {
@@ -193,6 +207,7 @@ namespace {
         int controller = 0;
         bool active = false;
         Clock::time_point start, action_start, last_check, last_moved, last_report, menu_since, split_seen;
+        Clock::time_point split_since{};   // the screen has been split since (0: not split)
         double action_length = 0.0;
         Action action = Action::Walk;
         float turn_dir = 1.0f;
@@ -639,12 +654,17 @@ namespace {
             if (human) {
                 // The bots are there for the person playing: go for them unless another
                 // player is right in the way, and never get bored of them.
-                cost *= 0.3f;
-                if (cams[i] == bot.target_cam) cost *= 0.7f;
+                cost *= 0.5f;
+                if (cams[i] == bot.target_cam) cost *= 0.8f;
             }
-            else if (cams[i] == bot.target_cam) {
-                const double on = seconds(bot.target_since, now);
-                cost *= (on < 30.0) ? 0.7f : float(1.0 + (on - 30.0) / 10.0);
+            else {
+                // Another bot only when it is close and the person is far: otherwise two
+                // bots that meet keep fighting each other and never come looking.
+                cost += 600.0f;
+                if (cams[i] == bot.target_cam) {
+                    const double on = seconds(bot.target_since, now);
+                    cost *= (on < 20.0) ? 0.8f : float(1.0 + (on - 20.0) / 10.0);
+                }
             }
             if (cost < best) {
                 best = cost;
@@ -734,7 +754,12 @@ namespace {
         // menus and story mode have one view, a multiplayer match one per player. They never
         // press anything outside a match, so they cannot disturb the player's menus.
         if (controller != 0) {
-            const bool split = (camera_count >= 2) && (controller < camera_count);
+            const bool split_now = (camera_count >= 2) && (controller < camera_count);
+            if (!split_now) bot.split_since = Clock::time_point{};
+            else if (bot.split_since == Clock::time_point{}) bot.split_since = now;
+            // Split for a full second: a match, not a menu changing over.
+            const bool split = split_now && (seconds(bot.split_since, now) >= 1.0);
+            if (split_now && bot.playing) bot.split_seen = now;
             if (split) {
                 bot.split_seen = now;
                 if (!bot.playing) {
@@ -874,7 +899,12 @@ namespace {
                 bool following = false;
                 Vec3 waypoint{};
                 if ((flat > 500.0f) || other_level) {
-                    if ((bot.route_generation != nav.generation) || (seconds(bot.route_time, now) > 1.0)) {
+                    // Keep a route while it still leads to the target: replanning every second
+                    // let the bot flip between two ways round and spin on the spot.
+                    const bool target_moved = !bot.route.empty() &&
+                        (flat_distance(nav.nodes[size_t(bot.route.back())].pos, target) > 400.0f) &&
+                        (seconds(bot.route_time, now) > 0.5);
+                    if ((bot.route_generation != nav.generation) || (seconds(bot.route_time, now) > (bot.route.empty() ? 1.0 : 5.0)) || target_moved) {
                         std::vector<uint8_t> blocked_points(nav.nodes.size(), 0);
                         bot.avoid.erase(std::remove_if(bot.avoid.begin(), bot.avoid.end(),
                             [&](const auto& a) { return now >= a.second; }), bot.avoid.end());
